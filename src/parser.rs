@@ -123,10 +123,7 @@ fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
                     .into_inner()
                     .map(build_expr)
                     .collect::<Result<Vec<_>>>()?;
-                Ok(Expr::Call {
-                    callee: Box::new(lhs?),
-                    args,
-                })
+                Ok(curry_call(lhs?, args))
             }
             r => Err(anyhow!("unexpected postfix: {:?}", r)),
         })
@@ -188,14 +185,11 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
             let mut inner = pair.into_inner();
             let params_pair = inner.next().ok_or_else(|| anyhow!("missing params"))?;
             let body_pair = inner.next().ok_or_else(|| anyhow!("missing body"))?;
-            let params = params_pair
+            let params: Vec<String> = params_pair
                 .into_inner()
                 .map(|p| p.as_str().to_string())
                 .collect();
-            Ok(Expr::Function {
-                params,
-                body: Box::new(build_expr(body_pair)?),
-            })
+            Ok(curry_function(params, build_expr(body_pair)?))
         }
         Rule::if_expr => {
             let mut inner = pair.into_inner();
@@ -228,4 +222,42 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
 
 fn unquote(s: &str) -> String {
     s[1..s.len() - 1].to_string()
+}
+
+// Multi-param `(x, y, z) -> body` desugars to `(x) -> (y) -> (z) -> body`.
+// Zero-param functions are preserved as-is.
+fn curry_function(params: Vec<String>, body: Expr) -> Expr {
+    if params.len() <= 1 {
+        return Expr::Function {
+            params,
+            body: Box::new(body),
+        };
+    }
+    let mut acc = body;
+    for p in params.into_iter().rev() {
+        acc = Expr::Function {
+            params: vec![p],
+            body: Box::new(acc),
+        };
+    }
+    acc
+}
+
+// Multi-arg `f(a, b, c)` desugars to `f(a)(b)(c)`. Zero-arg calls `f()`
+// remain a single call so zero-param functions still fire.
+fn curry_call(callee: Expr, args: Vec<Expr>) -> Expr {
+    if args.is_empty() {
+        return Expr::Call {
+            callee: Box::new(callee),
+            args,
+        };
+    }
+    let mut acc = callee;
+    for a in args {
+        acc = Expr::Call {
+            callee: Box::new(acc),
+            args: vec![a],
+        };
+    }
+    acc
 }

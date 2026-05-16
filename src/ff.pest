@@ -1,25 +1,22 @@
-// ----- Trivia: whitespace and comments -----
-// Newlines are NOT whitespace — they separate statements.
+// ----- Trivia -----
 WHITESPACE = _{ " " | "\t" }
 COMMENT    = _{ "#" ~ (!NEWLINE ~ ANY)* }
 NEWLINE    = _{ "\r\n" | "\n" | "\r" }
 
-// ----- Keywords (must be excluded from idents) -----
+// ----- Keywords (excluded from idents) -----
 keyword = @{
-    ("if" | "then" | "else" | "true" | "false")
+    ("if" | "then" | "else" | "match" | "true" | "false")
     ~ !(ASCII_ALPHANUMERIC | "_")
 }
 
 // ----- Literals & identifiers -----
-number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT*)? }
-string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
-bool   = @{ ("true" | "false") ~ !(ASCII_ALPHANUMERIC | "_") }
-ident  = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+number   = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT*)? }
+string   = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+bool     = @{ ("true" | "false") ~ !(ASCII_ALPHANUMERIC | "_") }
+ident    = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+wildcard = @{ "_" ~ !(ASCII_ALPHANUMERIC | "_") }
 
 // ----- Operator tokens -----
-// Within each alternation, longer / prefix-conflicting forms come first.
-
-// Arithmetic
 power    = { "**" | "^" }
 multiply = { "*" }
 divide   = { "/" }
@@ -27,7 +24,6 @@ modulo   = { "%" }
 add      = { "+" }
 subtract = { "-" }
 
-// Comparison
 eq        = { "==" }
 ne        = { "!=" }
 le        = { "<=" }
@@ -37,23 +33,14 @@ gt        = { ">" }
 not_match = { "!~" }
 match_op  = { "~" }
 
-// Logical
 logical_and = { "&&" }
 logical_or  = { "||" }
 
-// Unary
 neg         = { "-" }
 logical_not = { "!" }
 
-// Assignment (compound forms first)
-add_assign = { "+=" }
-sub_assign = { "-=" }
-mul_assign = { "*=" }
-div_assign = { "/=" }
-mod_assign = { "%=" }
-assign     = { "=" }
+assign = { "=" }
 
-// ----- Operator groupings for the Pratt parser -----
 prefix_op  = _{ neg | logical_not }
 postfix_op = _{ call_args }
 infix_op   = _{
@@ -64,22 +51,45 @@ infix_op   = _{
     | logical_and | logical_or
     | not_match | match_op
 }
-assign_op  = _{ add_assign | sub_assign | mul_assign | div_assign | mod_assign | assign }
 
-// ----- Collections -----
-// Trailing commas allowed throughout. `()` is the empty tuple;
-// `(a)` is a parenthesized expression; `(a,)` is a 1-tuple.
+// ----- Patterns -----
+// `..` matches zero-or-more remaining elements; `..name` binds them.
+pattern_rest = { ".." ~ ident? }
+pattern_item = _{ pattern_rest | pattern }
 
-list = { "[" ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ "]" }
+pattern_list = { "[" ~ (pattern_item ~ ("," ~ pattern_item)* ~ ","?)? ~ "]" }
 
+pattern_tuple = {
+      "(" ~ ")"
+    | "(" ~ pattern_item ~ "," ~ ")"
+    | "(" ~ pattern_item ~ ("," ~ pattern_item)+ ~ ","? ~ ")"
+}
+
+// Dict-pattern keys are expressions (evaluated), values are sub-patterns.
+pattern_dict_entry = { expr ~ ":" ~ pattern }
+pattern_dict       = { "{" ~ (pattern_dict_entry ~ ("," ~ pattern_dict_entry)* ~ ","?)? ~ "}" }
+pattern_set        = { "{" ~ pattern ~ ("," ~ pattern)* ~ ","? ~ "}" }
+
+// `wildcard` and `bool` precede `ident` so they aren't shadowed.
+pattern = _{
+      pattern_list
+    | pattern_tuple
+    | pattern_dict
+    | pattern_set
+    | number
+    | string
+    | bool
+    | wildcard
+    | ident
+}
+
+// ----- Collections (expressions) -----
+list  = { "[" ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ "]" }
 tuple = {
       "(" ~ ")"
     | "(" ~ expr ~ "," ~ ")"
     | "(" ~ expr ~ ("," ~ expr)+ ~ ","? ~ ")"
 }
-
-// `{ … }` resolves to dict when entries look like `k : v`, else set.
-// `{}` is an empty dict (dict is tried first).
 dict_entry = { expr ~ ":" ~ expr }
 dict       = { "{" ~ (dict_entry ~ ("," ~ dict_entry)* ~ ","?)? ~ "}" }
 set        = { "{" ~ expr ~ ("," ~ expr)* ~ ","? ~ "}" }
@@ -91,15 +101,23 @@ function = { params ~ "->" ~ expr }
 // ----- If expression -----
 if_expr = { "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr }
 
+// ----- Match expression -----
+// Arms are separated by newlines; the match ends at the first line that
+// isn't a `pattern -> expr` arm.
+match_arm  = { pattern ~ "->" ~ expr }
+match_expr = {
+    "match" ~ expr
+    ~ NEWLINE+
+    ~ match_arm ~ (NEWLINE+ ~ match_arm)*
+}
+
 // ----- Function call (postfix) -----
 call_args = { "(" ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ ")" }
 
 // ----- Primary expression -----
-// `function` is tried before `tuple` and `(expr)` (all start with `(`);
-// if no `->` is found, PEG backtracks to the next alternative.
-// `dict` precedes `set` so `{}` is parsed as an empty dict.
 primary = _{
       function
+    | match_expr
     | if_expr
     | number
     | string
@@ -112,16 +130,19 @@ primary = _{
     | ident
 }
 
-// ----- Expression (shaped for pest's PrattParser) -----
+// ----- Expression -----
 expr = {
     prefix_op* ~ primary ~ postfix_op*
     ~ (infix_op ~ prefix_op* ~ primary ~ postfix_op*)*
 }
 
-// ----- Statements & program -----
-assignment = { ident ~ assign_op ~ expr }
+// ----- Statements -----
+// LHS is a pattern, so `a = 1`, `[b, ..] = a`, `(x, y) = pair`, and
+// `{ "k": v } = some_dict` all work.
+assignment = { pattern ~ assign ~ expr }
 statement  = _{ assignment | expr }
-program    = {
+
+program = {
     SOI
     ~ NEWLINE*
     ~ (statement ~ (NEWLINE+ ~ statement)*)?

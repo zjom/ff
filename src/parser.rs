@@ -26,7 +26,7 @@ lazy_static! {
             | Op::infix(Rule::modulo, Assoc::Left))
         .op(Op::infix(Rule::power, Assoc::Right))
         .op(Op::prefix(Rule::neg) | Op::prefix(Rule::logical_not))
-        .op(Op::postfix(Rule::call_args));
+        .op(Op::postfix(Rule::call_args) | Op::postfix(Rule::dot_access));
 }
 
 pub fn parse(input: &str) -> Result<Program> {
@@ -124,6 +124,18 @@ fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
                     .map(build_expr)
                     .collect::<Result<Vec<_>>>()?;
                 Ok(curry_call(lhs?, args))
+            }
+            Rule::dot_access => {
+                let inner = op.into_inner().next().ok_or_else(|| anyhow!("empty dot"))?;
+                let key = match inner.as_rule() {
+                    Rule::dot_index => AccessKey::Index(inner.as_str().parse()?),
+                    Rule::ident => AccessKey::Field(inner.as_str().to_string()),
+                    r => return Err(anyhow!("unexpected dot key: {:?}", r)),
+                };
+                Ok(Expr::Access {
+                    target: Box::new(lhs?),
+                    key,
+                })
             }
             r => Err(anyhow!("unexpected postfix: {:?}", r)),
         })

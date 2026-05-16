@@ -42,7 +42,13 @@ logical_not = { "!" }
 assign = { "=" }
 
 prefix_op  = _{ neg | logical_not }
-postfix_op = _{ call_args }
+postfix_op = _{ call_args | dot_access }
+
+// `list.0` for list/tuple index, `dict.foo` for dict string-key lookup.
+// `dot_index` is digits-only so `xs.0.1` chains as `(xs.0).1` rather than
+// being read as a single decimal index.
+dot_index  = @{ ASCII_DIGIT+ }
+dot_access = { "." ~ (dot_index | ident) }
 infix_op   = _{
       power
     | multiply | divide | modulo

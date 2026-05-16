@@ -42,6 +42,10 @@ pub enum Expr {
         callee: Box<Expr>,
         args: Vec<Expr>,
     },
+    Access {
+        target: Box<Expr>,
+        key: AccessKey,
+    },
     Unary {
         op: UnaryOp,
         operand: Box<Expr>,
@@ -76,6 +80,12 @@ pub enum Pattern {
 pub enum PatternItem {
     Pattern(Pattern),
     Rest(Option<String>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AccessKey {
+    Index(usize),
+    Field(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

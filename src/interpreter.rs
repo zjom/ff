@@ -179,6 +179,29 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                 v => bail!("cannot call non-function: {}", type_name(&v)),
             }
         }
+        Expr::Access { target, key } => {
+            let t = eval_expr(target, env)?;
+            match (&t, key) {
+                (Value::List(xs), AccessKey::Index(i)) | (Value::Tuple(xs), AccessKey::Index(i)) => {
+                    xs.get(*i).cloned().ok_or_else(|| {
+                        anyhow!("index {} out of range (len {})", i, xs.len())
+                    })
+                }
+                (Value::Dict(es), AccessKey::Field(name)) => {
+                    let k = Value::String(name.clone());
+                    es.iter()
+                        .find(|(ek, _)| value_eq(ek, &k))
+                        .map(|(_, v)| v.clone())
+                        .ok_or_else(|| anyhow!("dict has no key {:?}", name))
+                }
+                (v, AccessKey::Index(_)) => {
+                    bail!("cannot index into {}", type_name(v))
+                }
+                (v, AccessKey::Field(name)) => {
+                    bail!("cannot read field .{} from {}", name, type_name(v))
+                }
+            }
+        }
         Expr::Unary { op, operand } => {
             let v = eval_expr(operand, env)?;
             match (op, v) {

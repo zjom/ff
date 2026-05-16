@@ -1,0 +1,130 @@
+// ----- Trivia: whitespace and comments -----
+// Newlines are NOT whitespace — they separate statements.
+WHITESPACE = _{ " " | "\t" }
+COMMENT    = _{ "#" ~ (!NEWLINE ~ ANY)* }
+NEWLINE    = _{ "\r\n" | "\n" | "\r" }
+
+// ----- Keywords (must be excluded from idents) -----
+keyword = @{
+    ("if" | "then" | "else" | "true" | "false")
+    ~ !(ASCII_ALPHANUMERIC | "_")
+}
+
+// ----- Literals & identifiers -----
+number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT*)? }
+string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+bool   = @{ ("true" | "false") ~ !(ASCII_ALPHANUMERIC | "_") }
+ident  = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// ----- Operator tokens -----
+// Within each alternation, longer / prefix-conflicting forms come first.
+
+// Arithmetic
+power    = { "**" | "^" }
+multiply = { "*" }
+divide   = { "/" }
+modulo   = { "%" }
+add      = { "+" }
+subtract = { "-" }
+
+// Comparison
+eq        = { "==" }
+ne        = { "!=" }
+le        = { "<=" }
+ge        = { ">=" }
+lt        = { "<" }
+gt        = { ">" }
+not_match = { "!~" }
+match_op  = { "~" }
+
+// Logical
+logical_and = { "&&" }
+logical_or  = { "||" }
+
+// Unary
+neg         = { "-" }
+logical_not = { "!" }
+
+// Assignment (compound forms first)
+add_assign = { "+=" }
+sub_assign = { "-=" }
+mul_assign = { "*=" }
+div_assign = { "/=" }
+mod_assign = { "%=" }
+assign     = { "=" }
+
+// ----- Operator groupings for the Pratt parser -----
+prefix_op  = _{ neg | logical_not }
+postfix_op = _{ call_args }
+infix_op   = _{
+      power
+    | multiply | divide | modulo
+    | add | subtract
+    | eq | ne | le | ge | lt | gt
+    | logical_and | logical_or
+    | not_match | match_op
+}
+assign_op  = _{ add_assign | sub_assign | mul_assign | div_assign | mod_assign | assign }
+
+// ----- Collections -----
+// Trailing commas allowed throughout. `()` is the empty tuple;
+// `(a)` is a parenthesized expression; `(a,)` is a 1-tuple.
+
+list = { "[" ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ "]" }
+
+tuple = {
+      "(" ~ ")"
+    | "(" ~ expr ~ "," ~ ")"
+    | "(" ~ expr ~ ("," ~ expr)+ ~ ","? ~ ")"
+}
+
+// `{ … }` resolves to dict when entries look like `k : v`, else set.
+// `{}` is an empty dict (dict is tried first).
+dict_entry = { expr ~ ":" ~ expr }
+dict       = { "{" ~ (dict_entry ~ ("," ~ dict_entry)* ~ ","?)? ~ "}" }
+set        = { "{" ~ expr ~ ("," ~ expr)* ~ ","? ~ "}" }
+
+// ----- Function literal -----
+params   = { "(" ~ (ident ~ ("," ~ ident)* ~ ","?)? ~ ")" }
+function = { params ~ "->" ~ expr }
+
+// ----- If expression -----
+if_expr = { "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr }
+
+// ----- Function call (postfix) -----
+call_args = { "(" ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ ")" }
+
+// ----- Primary expression -----
+// `function` is tried before `tuple` and `(expr)` (all start with `(`);
+// if no `->` is found, PEG backtracks to the next alternative.
+// `dict` precedes `set` so `{}` is parsed as an empty dict.
+primary = _{
+      function
+    | if_expr
+    | number
+    | string
+    | bool
+    | list
+    | dict
+    | set
+    | tuple
+    | "(" ~ expr ~ ")"
+    | ident
+}
+
+// ----- Expression (shaped for pest's PrattParser) -----
+expr = {
+    prefix_op* ~ primary ~ postfix_op*
+    ~ (infix_op ~ prefix_op* ~ primary ~ postfix_op*)*
+}
+
+// ----- Statements & program -----
+assignment = { ident ~ assign_op ~ expr }
+statement  = _{ assignment | expr }
+program    = {
+    SOI
+    ~ NEWLINE*
+    ~ (statement ~ (NEWLINE+ ~ statement)*)?
+    ~ NEWLINE*
+    ~ EOI
+}

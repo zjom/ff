@@ -53,12 +53,27 @@ fn build_program(pair: Pair<Rule>) -> Result<Program> {
     for inner in pair.into_inner() {
         match inner.as_rule() {
             Rule::assignment => statements.push(Statement::Assignment(build_assignment(inner)?)),
+            Rule::export_stmt => statements.push(Statement::Export(build_export(inner)?)),
             Rule::expr => statements.push(Statement::Expr(build_expr(inner)?)),
             Rule::EOI => {}
             r => return Err(anyhow!("unexpected rule in program: {:?}", r)),
         }
     }
     Ok(Program { statements })
+}
+
+fn build_export(pair: Pair<Rule>) -> Result<ExportKind> {
+    let inner = pair
+        .into_inner()
+        .next()
+        .ok_or_else(|| anyhow!("missing export form"))?;
+    match inner.as_rule() {
+        Rule::export_all => Ok(ExportKind::All),
+        Rule::export_names => Ok(ExportKind::Names(
+            inner.into_inner().map(|p| p.as_str().to_string()).collect(),
+        )),
+        r => Err(anyhow!("unexpected export form: {:?}", r)),
+    }
 }
 
 fn build_assignment(pair: Pair<Rule>) -> Result<Assignment> {
@@ -90,10 +105,25 @@ fn build_pattern(pair: Pair<Rule>) -> Result<Pattern> {
             let mut entries = Vec::new();
             for entry in pair.into_inner() {
                 let mut inner = entry.into_inner();
-                let key = build_expr(inner.next().ok_or_else(|| anyhow!("missing dict key"))?)?;
-                let val =
-                    build_pattern(inner.next().ok_or_else(|| anyhow!("missing dict value"))?)?;
-                entries.push((key, val));
+                let first = inner.next().ok_or_else(|| anyhow!("empty dict entry"))?;
+                match first.as_rule() {
+                    Rule::ident => {
+                        // `{name}` shorthand desugars to `{"name": name}` —
+                        // binds the matched value under the same identifier.
+                        let name = first.as_str().to_string();
+                        entries.push((Expr::String(name.clone()), Pattern::Ident(name)));
+                    }
+                    Rule::expr => {
+                        let key = build_expr(first)?;
+                        let val = build_pattern(
+                            inner
+                                .next()
+                                .ok_or_else(|| anyhow!("missing dict value"))?,
+                        )?;
+                        entries.push((key, val));
+                    }
+                    r => return Err(anyhow!("unexpected dict entry: {:?}", r)),
+                }
             }
             Ok(Pattern::Dict(entries))
         }
@@ -259,11 +289,19 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
                 .into_inner()
                 .map(|p| match p.as_rule() {
                     Rule::assignment => Ok(Statement::Assignment(build_assignment(p)?)),
+                    Rule::export_stmt => Ok(Statement::Export(build_export(p)?)),
                     Rule::expr => Ok(Statement::Expr(build_expr(p)?)),
                     r => Err(anyhow!("unexpected rule in scope: {:?}", r)),
                 })
                 .collect::<Result<_>>()?;
             Ok(Expr::Scope(stmts))
+        }
+        Rule::import_expr => {
+            let path = pair
+                .into_inner()
+                .next()
+                .ok_or_else(|| anyhow!("missing import path"))?;
+            Ok(Expr::Import(Box::new(build_primary(path)?)))
         }
         Rule::function => {
             let mut inner = pair.into_inner();

@@ -113,11 +113,7 @@ pub fn ctx_of(env: &Env) -> Rc<Ctx> {
     env.borrow().ctx.clone()
 }
 
-pub fn local_vars(env: &Env) -> HashMap<String, Value> {
-    env.borrow().vars.clone()
-}
-
-pub fn lookup(env: &Env, name: &str) -> Option<Value> {
+fn lookup(env: &Env, name: &str) -> Option<Value> {
     if let Some(v) = env.borrow().vars.get(name).cloned() {
         return Some(v);
     }
@@ -212,6 +208,42 @@ fn eval_statement(stmt: &Statement, env: &Env) -> Result<Value> {
             }
             Ok(Value::Unit)
         }
+        Statement::Export(kind) => {
+            let ctx = ctx_of(env);
+            let mut exports_slot = ctx.current_exports.borrow_mut();
+            // Top-level scripts have no exports table; `export` is a no-op
+            // there so a module file can still be run directly.
+            let Some(table) = exports_slot.as_mut() else {
+                return Ok(Value::Unit);
+            };
+            match kind {
+                ExportKind::All => {
+                    for (k, v) in env.borrow().vars.iter() {
+                        table.insert(k.clone(), v.clone());
+                    }
+                }
+                ExportKind::Names(names) => {
+                    for name in names {
+                        let v = lookup(env, name)
+                            .ok_or_else(|| anyhow!("export: undefined variable `{}`", name))?;
+                        table.insert(name.clone(), v);
+                    }
+                }
+            }
+            Ok(Value::Unit)
+        }
+        // Bare `import "x"` statement splats the module's exports into the
+        // current scope. An `import` used as part of a larger expression
+        // (`x = import "x"`, `foo(import "x")`) just produces a Module value.
+        Statement::Expr(Expr::Import(path)) => {
+            let val = eval_expr(&Expr::Import(path.clone()), env)?;
+            if let Value::Module { members, .. } = val {
+                for (k, v) in members {
+                    define(env, &k, v);
+                }
+            }
+            Ok(Value::Unit)
+        }
         Statement::Expr(e) => eval_expr(e, env),
     }
 }
@@ -293,6 +325,13 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                 .map(|a| eval_expr(a, env))
                 .collect::<Result<_>>()?;
             apply(env, callee_val, arg_vals)
+        }
+        Expr::Import(path) => {
+            let v = eval_expr(path, env)?;
+            let Value::String(s) = v else {
+                bail!("import expects string path, got {}", type_name(&v));
+            };
+            crate::prelude::import_module(env, &s)
         }
         Expr::Access { target, key } => {
             let t = eval_expr(target, env)?;
@@ -438,21 +477,38 @@ fn match_into(
         Pattern::Bool(p) => Ok(matches!(val, Value::Bool(b) if b == p)),
         Pattern::List(items) => match_seq(items, val, env, bindings, true),
         Pattern::Tuple(items) => match_seq(items, val, env, bindings, false),
-        Pattern::Dict(entries) => {
-            let Value::Dict(d) = val else {
-                return Ok(false);
-            };
-            for (key_expr, sub_pat) in entries {
-                let key = eval_expr(key_expr, env)?;
-                let Some((_, found)) = d.iter().find(|(k, _)| value_eq(k, &key)) else {
-                    return Ok(false);
-                };
-                if !match_into(sub_pat, found, env, bindings)? {
-                    return Ok(false);
+        Pattern::Dict(entries) => match val {
+            Value::Dict(d) => {
+                for (key_expr, sub_pat) in entries {
+                    let key = eval_expr(key_expr, env)?;
+                    let Some((_, found)) = d.iter().find(|(k, _)| value_eq(k, &key)) else {
+                        return Ok(false);
+                    };
+                    if !match_into(sub_pat, found, env, bindings)? {
+                        return Ok(false);
+                    }
                 }
+                Ok(true)
             }
-            Ok(true)
-        }
+            // Dict patterns also destructure modules, keyed by member name:
+            // `{Left, Right} = import "lib.ff"`.
+            Value::Module { members, .. } => {
+                for (key_expr, sub_pat) in entries {
+                    let key = eval_expr(key_expr, env)?;
+                    let Value::String(name) = key else {
+                        return Ok(false);
+                    };
+                    let Some(found) = members.get(&name).cloned() else {
+                        return Ok(false);
+                    };
+                    if !match_into(sub_pat, &found, env, bindings)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            _ => Ok(false),
+        },
         Pattern::Set(items) => {
             let Value::Set(s) = val else {
                 return Ok(false);

@@ -8,7 +8,7 @@ stmt_sep = _{ (NEWLINE | ";")+ }
 
 // ----- Keywords (excluded from idents) -----
 keyword = @{
-    ("if" | "then" | "else" | "match" | "true" | "false")
+    ("if" | "then" | "else" | "match" | "true" | "false" | "import" | "export")
     ~ !(ASCII_ALPHANUMERIC | "_")
 }
 
@@ -125,8 +125,10 @@ pattern_tuple = {
     | "(" ~ NEWLINE* ~ pattern_item ~ tuple_sep ~ (pattern_item ~ (tuple_sep ~ pattern_item)* ~ tuple_sep?)? ~ NEWLINE* ~ ")"
 }
 
-// Dict-pattern keys are expressions (evaluated), values are sub-patterns.
-pattern_dict_entry = { expr ~ NEWLINE* ~ ":" ~ NEWLINE* ~ pattern }
+// Dict-pattern entries: full `key: pat` (key is an expression, value a sub-pattern)
+// or shorthand `name`, which desugars to `"name": name` — handy for destructuring
+// modules: `{Left, Right} = import "lib.ff"`.
+pattern_dict_entry = { (expr ~ NEWLINE* ~ ":" ~ NEWLINE* ~ pattern) | ident }
 pattern_dict       = { "{" ~ coll_sep? ~ (pattern_dict_entry ~ (coll_sep ~ pattern_dict_entry)* ~ coll_sep?)? ~ "}" }
 pattern_set        = { "{" ~ coll_sep? ~ pattern ~ (coll_sep ~ pattern)* ~ coll_sep? ~ "}" }
 
@@ -200,6 +202,12 @@ match_expr = {
 // argument separator (so `f(a b)` is still juxtaposed application, not two args).
 call_args = { "(" ~ NEWLINE* ~ (expr ~ (NEWLINE* ~ "," ~ NEWLINE* ~ expr)* ~ NEWLINE* ~ ","? ~ NEWLINE*)? ~ ")" }
 
+// ----- Import expression -----
+// `import <primary>` loads a module and returns it as a value. As a bare
+// statement (not the RHS of an assignment) it also splats the module's exports
+// into the current scope — see eval_statement.
+import_expr = { "import" ~ NEWLINE* ~ primary }
+
 // ----- Primary expression -----
 // `scope` precedes `tuple` / `(expr)` so `(x = 1)` and multi-statement blocks
 // bind as blocks rather than failing the tuple/expr rules. `function` is first
@@ -208,6 +216,7 @@ primary = _{
       function
     | match_expr
     | if_expr
+    | import_expr
     | number
     | string
     | bool
@@ -231,7 +240,14 @@ expr = {
 // LHS is a pattern, so `a = 1`, `[b, ..] = a`, `(x, y) = pair`, and
 // `{ "k": v } = some_dict` all work.
 assignment = { pattern ~ assign ~ expr }
-statement  = _{ assignment | expr }
+
+// `export Left, Right` exports the named bindings from the current module.
+// `export *` snapshots every local binding visible at the call site.
+export_all   = { "*" ~ !op_char }
+export_names = { ident ~ (NEWLINE* ~ "," ~ NEWLINE* ~ ident)* ~ (NEWLINE* ~ ",")? }
+export_stmt  = { "export" ~ NEWLINE* ~ (export_all | export_names) }
+
+statement = _{ export_stmt | assignment | expr }
 
 program = {
     SOI

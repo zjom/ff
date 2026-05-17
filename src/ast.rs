@@ -6,7 +6,14 @@ pub struct Program {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     Assignment(Assignment),
+    Export(ExportKind),
     Expr(Expr),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExportKind {
+    All,
+    Names(Vec<String>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -42,6 +49,7 @@ pub enum Expr {
         callee: Box<Expr>,
         args: Vec<Expr>,
     },
+    Import(Box<Expr>),
     Scope(Vec<Statement>),
     Access {
         target: Box<Expr>,

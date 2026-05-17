@@ -1,5 +1,8 @@
-use crate::interpreter::{Env, Value, define};
+use crate::interpreter::{Env, Scope, Value, ctx_of, define, eval_program};
+use crate::parser::parse;
+use anyhow::{Result, anyhow};
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 mod global;
 mod io;
@@ -21,6 +24,43 @@ pub(crate) fn native_module(name: &str) -> Option<Value> {
             .into_iter()
             .map(|(k, v)| (k.to_string(), v))
             .collect::<HashMap<_, _>>(),
+    })
+}
+
+/// Resolve and load a module by path. Built-in modules (`io`, etc.) are checked
+/// first; otherwise the path is resolved relative to the current file and the
+/// source is parsed and evaluated in a fresh child scope. Only names registered
+/// via `export` end up in the returned module's members.
+pub fn import_module(env: &Env, path_str: &str) -> Result<Value> {
+    if let Some(m) = native_module(path_str) {
+        return Ok(m);
+    }
+    let ctx = ctx_of(env);
+    let resolved = match ctx.current_file.borrow().as_ref() {
+        Some(p) => p
+            .parent()
+            .map(|d| d.join(path_str))
+            .unwrap_or_else(|| PathBuf::from(path_str)),
+        None => PathBuf::from(path_str),
+    };
+    let source = std::fs::read_to_string(&resolved)
+        .map_err(|e| anyhow!("failed to read {}: {}", resolved.display(), e))?;
+    let program = parse(&source)?;
+    let name = resolved
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("module")
+        .to_string();
+    let module_env = Scope::child(env.clone());
+    let prev_file = ctx.current_file.replace(Some(resolved));
+    let prev_exports = ctx.current_exports.replace(Some(HashMap::new()));
+    let result = eval_program(&program, &module_env);
+    let exports = ctx.current_exports.replace(prev_exports);
+    *ctx.current_file.borrow_mut() = prev_file;
+    result?;
+    Ok(Value::Module {
+        name,
+        members: exports.unwrap_or_default(),
     })
 }
 

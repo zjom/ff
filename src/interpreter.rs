@@ -273,7 +273,7 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
             for (k, v) in entries {
                 let kv = eval_expr(k, env)?;
                 let vv = eval_expr(v, env)?;
-                if let Some(slot) = out.iter_mut().find(|(ek, _)| value_eq(ek, &kv)) {
+                if let Some(slot) = out.iter_mut().find(|(ek, _)| ek == &kv) {
                     slot.1 = vv;
                 } else {
                     out.push((kv, vv));
@@ -285,7 +285,7 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
             let mut out = Vec::with_capacity(items.len());
             for e in items {
                 let v = eval_expr(e, env)?;
-                if !out.iter().any(|x| value_eq(x, &v)) {
+                if !out.iter().any(|x| x == &v) {
                     out.push(v);
                 }
             }
@@ -344,7 +344,7 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                 (Value::Dict(es), AccessKey::Field(name)) => {
                     let k = Value::String(name.clone());
                     es.iter()
-                        .find(|(ek, _)| value_eq(ek, &k))
+                        .find(|(ek, _)| ek == &k)
                         .map(|(_, v)| v.clone())
                         .ok_or_else(|| anyhow!("dict has no key {:?}", name))
                 }
@@ -426,8 +426,8 @@ fn eval_binary(op: BinaryOp, lhs: &Expr, rhs: &Expr, env: &Env) -> Result<Value>
         (BinaryOp::Add, Value::String(a), Value::String(b)) => {
             Ok(Value::String(format!("{}{}", a, b)))
         }
-        (BinaryOp::Eq, a, b) => Ok(Value::Bool(value_eq(a, b))),
-        (BinaryOp::Ne, a, b) => Ok(Value::Bool(!value_eq(a, b))),
+        (BinaryOp::Eq, a, b) => Ok(Value::Bool(a == b)),
+        (BinaryOp::Ne, a, b) => Ok(Value::Bool(a != b)),
         (BinaryOp::Lt, Value::Number(a), Value::Number(b)) => Ok(Value::Bool(a < b)),
         (BinaryOp::Le, Value::Number(a), Value::Number(b)) => Ok(Value::Bool(a <= b)),
         (BinaryOp::Gt, Value::Number(a), Value::Number(b)) => Ok(Value::Bool(a > b)),
@@ -481,7 +481,7 @@ fn match_into(
             Value::Dict(d) => {
                 for (key_expr, sub_pat) in entries {
                     let key = eval_expr(key_expr, env)?;
-                    let Some((_, found)) = d.iter().find(|(k, _)| value_eq(k, &key)) else {
+                    let Some((_, found)) = d.iter().find(|(k, _)| k == &key) else {
                         return Ok(false);
                     };
                     if !match_into(sub_pat, found, env, bindings)? {
@@ -616,6 +616,12 @@ fn value_eq(a: &Value, b: &Value) -> bool {
             x.len() == y.len() && x.iter().all(|a| y.iter().any(|b| value_eq(a, b)))
         }
         _ => false,
+    }
+}
+
+impl core::cmp::PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        value_eq(self, other)
     }
 }
 

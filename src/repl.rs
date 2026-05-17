@@ -1,70 +1,89 @@
 use crate::ast::Program;
 use crate::interpreter::{Env, Scope, Value, eval_program};
 use crate::parser::parse;
-use std::io::{self, BufRead, Write};
+use rustyline::error::ReadlineError;
+use rustyline::validate::{ValidationContext, ValidationResult, Validator};
+use rustyline::{Config, EditMode, Editor, Completer, Helper, Highlighter, Hinter};
 
-pub fn run() {
-    let env = Scope::new();
-    let stdin = io::stdin();
-    let mut stdin = stdin.lock();
-    let mut stdout = io::stdout();
-    let mut buf = String::new();
-    let mut continuing = false;
+#[derive(Completer, Helper, Highlighter, Hinter)]
+struct REPLHelper {}
 
-    println!("ff repl — Ctrl-D to exit, blank line to submit/abort multi-line input");
-    loop {
-        let prompt = if continuing { ".. " } else { ">> " };
-        write!(stdout, "{}", prompt).ok();
-        stdout.flush().ok();
+impl Validator for REPLHelper {
+    fn validate(&self, ctx: &mut ValidationContext) -> rustyline::Result<ValidationResult> {
+        let input = ctx.input();
 
-        let mut line = String::new();
-        match stdin.read_line(&mut line) {
-            Ok(0) => {
-                println!();
-                break;
-            }
-            Ok(_) => {}
-            Err(e) => {
-                eprintln!("read error: {}", e);
-                break;
-            }
+        if input.is_empty() {
+            return Ok(ValidationResult::Valid(None));
         }
 
-        let line = line.trim_end_matches(['\n', '\r']);
-
-        if line.is_empty() {
-            if !continuing {
-                continue;
-            }
-            match parse(&buf) {
-                Ok(program) => run_program(&program, &env),
-                Err(e) => eprintln!("parse error: {}", e),
-            }
-            buf.clear();
-            continuing = false;
-            continue;
+        // If the input ends with a newline, it means the user pressed Enter on an empty line
+        // at the end of a multi-line input, which we treat as a submission/abort.
+        if input.ends_with('\n') {
+            return Ok(ValidationResult::Valid(None));
         }
 
-        if !buf.is_empty() {
-            buf.push('\n');
-        }
-        buf.push_str(line);
-
-        match parse(&buf) {
-            Ok(program) => {
-                // A trailing `,` (e.g. after a match arm) means the user may
-                // still be adding more — keep collecting until they submit
-                // with a blank line.
-                if ends_with_continuation_comma(&buf) {
-                    continuing = true;
+        match parse(input) {
+            Ok(_) => {
+                if ends_with_continuation_comma(input) {
+                    Ok(ValidationResult::Incomplete)
                 } else {
-                    run_program(&program, &env);
-                    buf.clear();
-                    continuing = false;
+                    Ok(ValidationResult::Valid(None))
                 }
             }
             Err(_) => {
-                continuing = true;
+                // Treat parse errors as incomplete to allow for multi-line input.
+                Ok(ValidationResult::Incomplete)
+            }
+        }
+    }
+}
+
+pub fn run() {
+    let env = Scope::new();
+    let config = Config::builder()
+        .edit_mode(EditMode::Emacs)
+        .build();
+    let helper = REPLHelper {};
+    let mut rl = Editor::with_config(config).unwrap();
+    rl.set_helper(Some(helper));
+
+    // Try to load history from a local file
+    let history_path = ".ff_history";
+    let _ = rl.load_history(history_path);
+
+    println!("ff repl — Ctrl-D to exit, blank line to submit/abort multi-line input");
+    loop {
+        let prompt = ">> ";
+        let readline = rl.readline(prompt);
+        match readline {
+            Ok(line) => {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                rl.add_history_entry(line.as_str()).ok();
+                
+                match parse(&line) {
+                    Ok(program) => {
+                        run_program(&program, &env);
+                    }
+                    Err(e) => {
+                        eprintln!("parse error: {}", e);
+                    }
+                }
+                // Save history after each successful command
+                let _ = rl.save_history(history_path);
+            }
+            Err(ReadlineError::Interrupted) => {
+                // Ctrl-C: Clear the current buffer and start over
+                continue;
+            }
+            Err(ReadlineError::Eof) => {
+                println!();
+                break;
+            }
+            Err(e) => {
+                eprintln!("error: {}", e);
+                break;
             }
         }
     }

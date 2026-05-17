@@ -12,3 +12,4 @@ rug = { version = "1.27", default-features = false, features = ["rational"] }
 rustyline = { version = "18.0.0", features = ["derive"] }
 bon = "3.9.1"
 clap = { version="4.6.1", features = ["derive"] }
+im = "15"

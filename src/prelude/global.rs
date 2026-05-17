@@ -21,10 +21,9 @@ fn pipe() -> Value {
 fn cons() -> Value {
     native!("::", 2, |_env, args| {
         match (args[0].clone(), args[1].clone()) {
-            (v, Value::List(xs)) => {
-                let mut ys = xs;
-                ys.insert(0, v);
-                Ok(Value::List(ys))
+            (v, Value::List(mut xs)) => {
+                xs.push_front(v);
+                Ok(Value::List(xs))
             }
 
             (Value::String(mut left), Value::String(right)) => {
@@ -32,26 +31,24 @@ fn cons() -> Value {
                 Ok(Value::String(left))
             }
 
-            (v, Value::Tuple(xs)) => {
-                let mut ys = xs;
-                ys.insert(0, v);
-                Ok(Value::Tuple(ys))
+            (v, Value::Tuple(mut xs)) => {
+                xs.push_front(v);
+                Ok(Value::Tuple(xs))
             }
 
-            (v, Value::Set(xs)) => {
+            (v, Value::Set(mut xs)) => {
                 if xs.iter().any(|x| &v == x) {
                     Ok(Value::Set(xs))
                 } else {
-                    let mut ys = xs;
-                    ys.push(v);
-                    Ok(Value::Set(ys))
+                    xs.push_back(v);
+                    Ok(Value::Set(xs))
                 }
             }
             (Value::Tuple(kvs), Value::Dict(mut xs)) => {
-                let (key, value) = (kvs[0].clone(), kvs[1].clone());
                 if kvs.len() == 2 {
+                    let (key, value) = (kvs[0].clone(), kvs[1].clone());
                     xs.retain(|(k, _)| k != &key);
-                    xs.push((key, value));
+                    xs.push_back((key, value));
                     Ok(Value::Dict(xs))
                 } else {
                     bail!("unsupported operation: can only cons a length 2 tuple with a dict")

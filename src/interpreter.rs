@@ -1,5 +1,6 @@
 use crate::ast::*;
 use anyhow::{Result, anyhow, bail};
+use im::Vector;
 use rug::{Integer, Rational};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -13,10 +14,10 @@ pub enum Value {
     Number(Rational),
     String(String),
     Bool(bool),
-    List(Vec<Value>),
-    Tuple(Vec<Value>),
-    Dict(Vec<(Value, Value)>),
-    Set(Vec<Value>),
+    List(Vector<Value>),
+    Tuple(Vector<Value>),
+    Dict(Vector<(Value, Value)>),
+    Set(Vector<Value>),
     Function {
         params: Vec<String>,
         body: Expr,
@@ -269,24 +270,24 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                 .collect::<Result<_>>()?,
         )),
         Expr::Dict(entries) => {
-            let mut out: Vec<(Value, Value)> = Vec::with_capacity(entries.len());
+            let mut out: Vector<(Value, Value)> = Vector::new();
             for (k, v) in entries {
                 let kv = eval_expr(k, env)?;
                 let vv = eval_expr(v, env)?;
-                if let Some(slot) = out.iter_mut().find(|(ek, _)| ek == &kv) {
-                    slot.1 = vv;
+                if let Some(idx) = out.iter().position(|(ek, _)| ek == &kv) {
+                    out.set(idx, (kv, vv));
                 } else {
-                    out.push((kv, vv));
+                    out.push_back((kv, vv));
                 }
             }
             Ok(Value::Dict(out))
         }
         Expr::Set(items) => {
-            let mut out = Vec::with_capacity(items.len());
+            let mut out: Vector<Value> = Vector::new();
             for e in items {
                 let v = eval_expr(e, env)?;
                 if !out.iter().any(|x| x == &v) {
-                    out.push(v);
+                    out.push_back(v);
                 }
             }
             Ok(Value::Set(out))
@@ -543,14 +544,16 @@ fn match_into(
                 match_into(tail, &t, env, bindings)
             }
             Value::Dict(es) => {
-                let Some(((k, v), rest)) = es.split_first() else {
+                let Some((k, v)) = es.front() else {
                     return Ok(false);
                 };
-                let h = Value::Tuple(vec![k.clone(), v.clone()]);
+                let h = Value::Tuple(im::vector![k.clone(), v.clone()]);
                 if !match_into(head, &h, env, bindings)? {
                     return Ok(false);
                 }
-                match_into(tail, &Value::Dict(rest.to_vec()), env, bindings)
+                let mut rest = es.clone();
+                rest.pop_front();
+                match_into(tail, &Value::Dict(rest), env, bindings)
             }
             _ => Ok(false),
         },
@@ -560,18 +563,20 @@ fn match_into(
 fn match_cons_seq(
     head: &Pattern,
     tail: &Pattern,
-    xs: &[Value],
+    xs: &Vector<Value>,
     env: &Env,
     bindings: &mut HashMap<String, Value>,
-    rewrap: impl FnOnce(Vec<Value>) -> Value,
+    rewrap: impl FnOnce(Vector<Value>) -> Value,
 ) -> Result<bool> {
-    let Some((h, t)) = xs.split_first() else {
+    let Some(h) = xs.front() else {
         return Ok(false);
     };
     if !match_into(head, h, env, bindings)? {
         return Ok(false);
     }
-    match_into(tail, &rewrap(t.to_vec()), env, bindings)
+    let mut rest = xs.clone();
+    rest.pop_front();
+    match_into(tail, &rewrap(rest), env, bindings)
 }
 
 fn match_seq(
@@ -623,7 +628,7 @@ fn match_seq(
                 }
             }
             let after_start = elems.len() - after.len();
-            for (p, v) in after.iter().zip(elems[after_start..].iter()) {
+            for (p, v) in after.iter().zip(elems.iter().skip(after_start)) {
                 let PatternItem::Pattern(p) = p else {
                     unreachable!()
                 };
@@ -632,7 +637,7 @@ fn match_seq(
                 }
             }
             if let PatternItem::Rest(Some(name)) = &items[idx] {
-                let middle = elems[before.len()..after_start].to_vec();
+                let middle = elems.clone().slice(before.len()..after_start);
                 let bound = if list_like {
                     Value::List(middle)
                 } else {

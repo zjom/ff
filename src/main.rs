@@ -1,3 +1,5 @@
+use ff::repl::Repl;
+
 fn main() {
-    ff::repl::run();
+    Repl::new().run().unwrap();
 }

@@ -10,3 +10,4 @@ anyhow = "1"
 lazy_static = "1.4"
 rug = { version = "1.27", default-features = false, features = ["rational"] }
 rustyline = { version = "18.0.0", features = ["derive"] }
+bon = "3.9.1"

@@ -85,3 +85,59 @@ fn decimal_index_chains_not_decimal() {
     // `.0.1` must chain as `(.0).1`, never read as the decimal 0.1.
     assert_eq!(eval("[[1, 2], [3, 4]].0.1"), "2");
 }
+
+// --- multiline collections --------------------------------------------------
+
+#[test]
+fn list_newline_separated() {
+    assert_eq!(eval("[\n1\n2\n3\n]"), "[1, 2, 3]");
+}
+
+#[test]
+fn list_newline_after_comma() {
+    assert_eq!(eval("[1,\n2,\n3]"), "[1, 2, 3]");
+}
+
+#[test]
+fn list_extra_commas_and_newlines_collapse() {
+    // Any non-empty run of `,` and newlines counts as a single separator.
+    assert_eq!(eval("[1,\n   ,2]"), "[1, 2]");
+}
+
+#[test]
+fn list_leading_and_trailing_separators() {
+    assert_eq!(eval("[\n  ,1,\n  2,\n]"), "[1, 2]");
+}
+
+#[test]
+fn tuple_multiline() {
+    assert_eq!(eval("(\n1,\n2,\n3\n)"), "(1, 2, 3)");
+}
+
+#[test]
+fn tuple_singleton_trailing_newline() {
+    assert_eq!(eval("(7,\n)"), "(7,)");
+}
+
+#[test]
+fn dict_multiline() {
+    assert_eq!(
+        eval("{\n  \"a\": 1,\n  \"b\": 2\n}"),
+        r#"{"a": 1, "b": 2}"#
+    );
+}
+
+#[test]
+fn dict_value_on_next_line() {
+    assert_eq!(eval("{\"a\":\n  1}"), r#"{"a": 1}"#);
+}
+
+#[test]
+fn set_multiline() {
+    assert_eq!(eval("{\n1\n2\n3\n}"), "{1, 2, 3}");
+}
+
+#[test]
+fn call_args_multiline() {
+    assert_eq!(eval("f = (a, b, c) => a + b + c\nf(\n  1,\n  2,\n  3,\n)"), "6");
+}

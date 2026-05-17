@@ -103,23 +103,32 @@ infix_op   = _{
     | custom_op_or
 }
 
+// ----- Collection separators -----
+// Inside `[]`, `{}`, dict/set patterns and pattern-lists, items can be
+// separated by any non-empty run of commas and/or newlines. This makes layouts
+// like `[1,\n 2]`, `[\n 1\n 2\n]`, and `[1,\n  ,2]` all parse the same.
+// Tuples and call-arg lists need at least one literal `,` to disambiguate from
+// `(expr)` / scope / juxtaposition.
+coll_sep  = _{ (NEWLINE | ",")+ }
+// Leading run is NEWLINE-only so the greedy `*` doesn't gobble the required `,`.
+tuple_sep = _{ NEWLINE* ~ "," ~ (NEWLINE | ",")* }
+
 // ----- Patterns -----
 // `..` matches zero-or-more remaining elements; `..name` binds them.
 pattern_rest = { ".." ~ ident? }
 pattern_item = _{ pattern_rest | pattern }
 
-pattern_list = { "[" ~ (pattern_item ~ ("," ~ pattern_item)* ~ ","?)? ~ "]" }
+pattern_list = { "[" ~ coll_sep? ~ (pattern_item ~ (coll_sep ~ pattern_item)* ~ coll_sep?)? ~ "]" }
 
 pattern_tuple = {
-      "(" ~ ")"
-    | "(" ~ pattern_item ~ "," ~ ")"
-    | "(" ~ pattern_item ~ ("," ~ pattern_item)+ ~ ","? ~ ")"
+      "(" ~ NEWLINE* ~ ")"
+    | "(" ~ NEWLINE* ~ pattern_item ~ tuple_sep ~ (pattern_item ~ (tuple_sep ~ pattern_item)* ~ tuple_sep?)? ~ NEWLINE* ~ ")"
 }
 
 // Dict-pattern keys are expressions (evaluated), values are sub-patterns.
-pattern_dict_entry = { expr ~ ":" ~ pattern }
-pattern_dict       = { "{" ~ (pattern_dict_entry ~ ("," ~ pattern_dict_entry)* ~ ","?)? ~ "}" }
-pattern_set        = { "{" ~ pattern ~ ("," ~ pattern)* ~ ","? ~ "}" }
+pattern_dict_entry = { expr ~ NEWLINE* ~ ":" ~ NEWLINE* ~ pattern }
+pattern_dict       = { "{" ~ coll_sep? ~ (pattern_dict_entry ~ (coll_sep ~ pattern_dict_entry)* ~ coll_sep?)? ~ "}" }
+pattern_set        = { "{" ~ coll_sep? ~ pattern ~ (coll_sep ~ pattern)* ~ coll_sep? ~ "}" }
 
 // `wildcard` and `bool` precede `ident` so they aren't shadowed. `op_paren`
 // precedes `pattern_tuple` so `(++)` binds the operator name rather than
@@ -138,15 +147,14 @@ pattern = _{
 }
 
 // ----- Collections (expressions) -----
-list  = { "[" ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ "]" }
+list  = { "[" ~ coll_sep? ~ (expr ~ (coll_sep ~ expr)* ~ coll_sep?)? ~ "]" }
 tuple = {
-      "(" ~ ")"
-    | "(" ~ expr ~ "," ~ ")"
-    | "(" ~ expr ~ ("," ~ expr)+ ~ ","? ~ ")"
+      "(" ~ NEWLINE* ~ ")"
+    | "(" ~ NEWLINE* ~ expr ~ tuple_sep ~ (expr ~ (tuple_sep ~ expr)* ~ tuple_sep?)? ~ NEWLINE* ~ ")"
 }
-dict_entry = { expr ~ ":" ~ expr }
-dict       = { "{" ~ (dict_entry ~ ("," ~ dict_entry)* ~ ","?)? ~ "}" }
-set        = { "{" ~ expr ~ ("," ~ expr)* ~ ","? ~ "}" }
+dict_entry = { expr ~ NEWLINE* ~ ":" ~ NEWLINE* ~ expr }
+dict       = { "{" ~ coll_sep? ~ (dict_entry ~ (coll_sep ~ dict_entry)* ~ coll_sep?)? ~ "}" }
+set        = { "{" ~ coll_sep? ~ expr ~ (coll_sep ~ expr)* ~ coll_sep? ~ "}" }
 
 // ----- Scope (block expression) -----
 // `( stmts )`. Evaluates statements in order in a child environment that
@@ -188,7 +196,9 @@ match_expr = {
 }
 
 // ----- Function call (postfix) -----
-call_args = { "(" ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ ")" }
+// Newlines allowed around commas and at the boundaries, but commas remain the
+// argument separator (so `f(a b)` is still juxtaposed application, not two args).
+call_args = { "(" ~ NEWLINE* ~ (expr ~ (NEWLINE* ~ "," ~ NEWLINE* ~ expr)* ~ NEWLINE* ~ ","? ~ NEWLINE*)? ~ ")" }
 
 // ----- Primary expression -----
 // `scope` precedes `tuple` / `(expr)` so `(x = 1)` and multi-statement blocks

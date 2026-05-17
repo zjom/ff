@@ -35,6 +35,24 @@ fn multi_param_desugar() {
 }
 
 #[test]
+fn space_separated_bare_params() {
+    // `a b c => ...` is equivalent to `(a, b, c) => ...`.
+    assert_eq!(eval("add = a b c => a + b + c\nadd(1, 2, 3)"), "6");
+    assert_eq!(eval("add = a b c => a + b + c\nadd 1 2 3"), "6");
+}
+
+#[test]
+fn space_separated_params_in_parens() {
+    assert_eq!(eval("add = (a b c) => a + b + c\nadd(1, 2, 3)"), "6");
+}
+
+#[test]
+fn mixed_comma_and_space_params() {
+    assert_eq!(eval("add = (a, b c) => a + b + c\nadd(1, 2, 3)"), "6");
+    assert_eq!(eval("add = a, b c => a + b + c\nadd(1, 2, 3)"), "6");
+}
+
+#[test]
 fn juxt_call_chain() {
     assert_eq!(eval("add = x => y => x + y\nadd 3 4"), "7");
 }

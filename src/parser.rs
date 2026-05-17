@@ -267,13 +267,12 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
         }
         Rule::function => {
             let mut inner = pair.into_inner();
-            let head = inner.next().ok_or_else(|| anyhow!("missing params"))?;
+            let params_pair = inner.next().ok_or_else(|| anyhow!("missing params"))?;
             let body_pair = inner.next().ok_or_else(|| anyhow!("missing body"))?;
-            let params: Vec<String> = match head.as_rule() {
-                Rule::params => head.into_inner().map(|p| p.as_str().to_string()).collect(),
-                Rule::ident => vec![head.as_str().to_string()],
-                r => return Err(anyhow!("unexpected function head: {:?}", r)),
-            };
+            let params: Vec<String> = params_pair
+                .into_inner()
+                .map(|p| p.as_str().to_string())
+                .collect();
             Ok(curry_function(params, build_expr(body_pair)?))
         }
         Rule::if_expr => {

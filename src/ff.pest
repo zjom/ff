@@ -158,9 +158,14 @@ scope = {
 }
 
 // ----- Function literal -----
-// A single-parameter function may drop the parens: `x => body` == `(x) => body`.
-params   = { "(" ~ (ident ~ ("," ~ ident)* ~ ","?)? ~ ")" }
-function = { (params | ident) ~ "=>" ~ expr }
+// Parameters are space-separated; commas are optional. Parens are optional for
+// one or more parameters but required for zero: `() => 1`, `x => x + 1`,
+// `a b c => a + b + c`, `(a, b, c) => ...`, `(a b c) => ...` all work.
+params = {
+      "(" ~ (ident ~ (","? ~ ident)* ~ ","?)? ~ ")"
+    | ident ~ (","? ~ ident)*
+}
+function = { params ~ "=>" ~ expr }
 
 // ----- If expression -----
 if_expr = { "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr }

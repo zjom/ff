@@ -26,7 +26,9 @@ lazy_static! {
             | Op::infix(Rule::modulo, Assoc::Left))
         .op(Op::infix(Rule::power, Assoc::Right))
         .op(Op::prefix(Rule::neg) | Op::prefix(Rule::logical_not))
-        .op(Op::postfix(Rule::call_args) | Op::postfix(Rule::dot_access));
+        .op(Op::postfix(Rule::call_args)
+            | Op::postfix(Rule::dot_access)
+            | Op::postfix(Rule::juxt_arg));
 }
 
 pub fn parse(input: &str) -> Result<Program> {
@@ -137,6 +139,17 @@ fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
                     key,
                 })
             }
+            Rule::juxt_arg => {
+                let inner = op
+                    .into_inner()
+                    .next()
+                    .ok_or_else(|| anyhow!("empty juxt_arg"))?;
+                let arg = build_primary(inner)?;
+                Ok(Expr::Call {
+                    callee: Box::new(lhs?),
+                    args: vec![arg],
+                })
+            }
             r => Err(anyhow!("unexpected postfix: {:?}", r)),
         })
         .map_infix(|lhs, op, rhs| {
@@ -193,14 +206,26 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
         Rule::set => Ok(Expr::Set(
             pair.into_inner().map(build_expr).collect::<Result<_>>()?,
         )),
+        Rule::scope => {
+            let stmts = pair
+                .into_inner()
+                .map(|p| match p.as_rule() {
+                    Rule::assignment => Ok(Statement::Assignment(build_assignment(p)?)),
+                    Rule::expr => Ok(Statement::Expr(build_expr(p)?)),
+                    r => Err(anyhow!("unexpected rule in scope: {:?}", r)),
+                })
+                .collect::<Result<_>>()?;
+            Ok(Expr::Scope(stmts))
+        }
         Rule::function => {
             let mut inner = pair.into_inner();
-            let params_pair = inner.next().ok_or_else(|| anyhow!("missing params"))?;
+            let head = inner.next().ok_or_else(|| anyhow!("missing params"))?;
             let body_pair = inner.next().ok_or_else(|| anyhow!("missing body"))?;
-            let params: Vec<String> = params_pair
-                .into_inner()
-                .map(|p| p.as_str().to_string())
-                .collect();
+            let params: Vec<String> = match head.as_rule() {
+                Rule::params => head.into_inner().map(|p| p.as_str().to_string()).collect(),
+                Rule::ident => vec![head.as_str().to_string()],
+                r => return Err(anyhow!("unexpected function head: {:?}", r)),
+            };
             Ok(curry_function(params, build_expr(body_pair)?))
         }
         Rule::if_expr => {
@@ -215,9 +240,13 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
             })
         }
         Rule::match_expr => {
-            let mut inner = pair.into_inner();
-            let scrutinee = Box::new(build_expr(inner.next().unwrap())?);
-            let arms = inner
+            let mut iter = pair.into_inner().peekable();
+            let scrutinee_expr = if iter.peek().map(|p| p.as_rule()) == Some(Rule::expr) {
+                Some(build_expr(iter.next().unwrap())?)
+            } else {
+                None
+            };
+            let arms = iter
                 .map(|arm| {
                     let mut p = arm.into_inner();
                     let pattern = build_pattern(p.next().unwrap())?;
@@ -225,7 +254,24 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
                     Ok(MatchArm { pattern, body })
                 })
                 .collect::<Result<Vec<_>>>()?;
-            Ok(Expr::Match { scrutinee, arms })
+            match scrutinee_expr {
+                Some(s) => Ok(Expr::Match {
+                    scrutinee: Box::new(s),
+                    arms,
+                }),
+                None => {
+                    // Match without a scrutinee desugars to a 1-arg function.
+                    // `$match$` is not a valid user ident so it can't collide.
+                    let param = "$match$".to_string();
+                    Ok(Expr::Function {
+                        params: vec![param.clone()],
+                        body: Box::new(Expr::Match {
+                            scrutinee: Box::new(Expr::Ident(param)),
+                            arms,
+                        }),
+                    })
+                }
+            }
         }
         Rule::expr => build_expr(pair),
         r => Err(anyhow!("unexpected primary: {:?}", r)),

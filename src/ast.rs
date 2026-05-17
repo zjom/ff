@@ -42,6 +42,7 @@ pub enum Expr {
         callee: Box<Expr>,
         args: Vec<Expr>,
     },
+    Scope(Vec<Statement>),
     Access {
         target: Box<Expr>,
         key: AccessKey,

@@ -42,13 +42,17 @@ logical_not = { "!" }
 assign = { "=" }
 
 prefix_op  = _{ neg | logical_not }
-postfix_op = _{ call_args | dot_access }
+postfix_op = _{ call_args | dot_access | juxt_arg }
 
 // `list.0` for list/tuple index, `dict.foo` for dict string-key lookup.
 // `dot_index` is digits-only so `xs.0.1` chains as `(xs.0).1` rather than
 // being read as a single decimal index.
 dot_index  = @{ ASCII_DIGIT+ }
 dot_access = { "." ~ (dot_index | ident) }
+
+// Function application by juxtaposition: `f x` is `f(x)`. Each juxt_arg
+// consumes one primary, so `f g h` chains left-associatively as `(f g) h`.
+juxt_arg = { primary }
 infix_op   = _{
       power
     | multiply | divide | modulo
@@ -100,27 +104,46 @@ dict_entry = { expr ~ ":" ~ expr }
 dict       = { "{" ~ (dict_entry ~ ("," ~ dict_entry)* ~ ","?)? ~ "}" }
 set        = { "{" ~ expr ~ ("," ~ expr)* ~ ","? ~ "}" }
 
+// ----- Scope (block expression) -----
+// Rust-like: `{ stmts }`. Evaluates statements in order in a child environment
+// that captures the enclosing lexical scope; new bindings are local to the
+// block. The block's value is the value of the last statement (Unit if that
+// statement is an assignment). To disambiguate from set/dict, a scope must
+// contain either a single assignment or two-plus newline-separated statements.
+// `{x}` remains a single-element set; `{x = 1}` is a scope.
+scope = {
+      "{" ~ NEWLINE* ~ statement ~ (NEWLINE+ ~ statement)+ ~ NEWLINE* ~ "}"
+    | "{" ~ NEWLINE* ~ assignment ~ NEWLINE* ~ "}"
+}
+
 // ----- Function literal -----
+// A single-parameter function may drop the parens: `x -> body` == `(x) -> body`.
 params   = { "(" ~ (ident ~ ("," ~ ident)* ~ ","?)? ~ ")" }
-function = { params ~ "->" ~ expr }
+function = { (params | ident) ~ "->" ~ expr }
 
 // ----- If expression -----
 if_expr = { "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr }
 
 // ----- Match expression -----
-// Arms are separated by newlines; the match ends at the first line that
-// isn't a `pattern -> expr` arm.
+// Arms are separated by `,`. A newline still terminates the scrutinee so
+// `match value\n  pat -> ...` parses (without it, juxtaposition would eat
+// the first pattern as a function arg). Newlines around the comma are
+// allowed so arms can be laid out across multiple lines. The scrutinee is
+// optional: a match without one evaluates to a 1-arg function whose
+// argument becomes the scrutinee.
 match_arm  = { pattern ~ "->" ~ expr }
 match_expr = {
-    "match" ~ expr
+    "match" ~ expr?
     ~ NEWLINE+
-    ~ match_arm ~ (NEWLINE+ ~ match_arm)*
+    ~ match_arm ~ ("," ~ NEWLINE* ~ match_arm)* ~ ","?
 }
 
 // ----- Function call (postfix) -----
 call_args = { "(" ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ ")" }
 
 // ----- Primary expression -----
+// `scope` precedes `dict`/`set` so `{x = 1}` and multi-statement blocks bind as
+// blocks rather than failing the collection rules.
 primary = _{
       function
     | match_expr
@@ -129,6 +152,7 @@ primary = _{
     | string
     | bool
     | list
+    | scope
     | dict
     | set
     | tuple

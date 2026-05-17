@@ -211,6 +211,14 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
             }
         }
         Expr::Binary { op, lhs, rhs } => eval_binary(*op, lhs, rhs, env),
+        Expr::Scope(stmts) => {
+            let scope = Scope::child(env.clone());
+            let mut last = Value::Unit;
+            for stmt in stmts {
+                last = eval_statement(stmt, &scope)?;
+            }
+            Ok(last)
+        }
     }
 }
 

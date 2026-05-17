@@ -11,18 +11,12 @@ fn define_and_use_infix() {
 #[test]
 fn operator_as_value() {
     // `(++)` is just an identifier; binding it to another name works.
-    assert_eq!(
-        eval("(++) = (x, y) => x + y\nplus = (++)\nplus(2, 3)"),
-        "5"
-    );
+    assert_eq!(eval("(++) = (x, y) => x + y\nplus = (++)\nplus(2, 3)"), "5");
 }
 
 #[test]
 fn operator_curried_via_partial_application() {
-    assert_eq!(
-        eval("(++) = (x, y) => x + y\ninc = (++)(1)\ninc(10)"),
-        "11"
-    );
+    assert_eq!(eval("(++) = (x, y) => x + y\ninc = (++)(1)\ninc(10)"), "11");
 }
 
 #[test]
@@ -47,10 +41,7 @@ fn add_bucket_binds_looser_than_mult() {
 #[test]
 fn comp_bucket_below_additive() {
     // `<=>` is comparison level: `1 + 2 <=> 3` = 3 <=> 3.
-    assert_eq!(
-        eval("(<=>) = (x, y) => x == y\n1 + 2 <=> 3"),
-        "true"
-    );
+    assert_eq!(eval("(<=>) = (x, y) => x == y\n1 + 2 <=> 3"), "true");
 }
 
 #[test]
@@ -62,10 +53,7 @@ fn cat_bucket_between_comparison_and_additive() {
         "false"
     );
     // Comparison happens last: (3 ^^ 7) == 12 -> 21 == 12.
-    assert_eq!(
-        eval("(^^) = (x, y) => x * y\n1 + 2 ^^ 3 + 4 == 21"),
-        "true"
-    );
+    assert_eq!(eval("(^^) = (x, y) => x * y\n1 + 2 ^^ 3 + 4 == 21"), "true");
 }
 
 // --- associativity ----------------------------------------------------------
@@ -133,7 +121,7 @@ fn custom_op_with_equals_prefix() {
 
 #[test]
 fn undefined_operator_is_runtime_error() {
-    let err = eval_err("1 ++ 2");
+    let err = eval_err("1 +++ 2");
     assert!(err.contains("undefined"), "unexpected error: {}", err);
 }
 

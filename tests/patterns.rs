@@ -104,6 +104,74 @@ fn match_pattern_failure_is_runtime_error() {
     assert!(ff::interpreter::run(&prog).is_err());
 }
 
+// --- cons-pattern (`h ++ t`) ------------------------------------------------
+
+#[test]
+fn cons_pattern_list_destructure() {
+    assert_eq!(eval("h ++ t = [1, 2, 3]\nh"), "1");
+    assert_eq!(eval("h ++ t = [1, 2, 3]\nt"), "[2, 3]");
+}
+
+#[test]
+fn cons_pattern_tuple_destructure() {
+    assert_eq!(eval("h ++ t = (10, 20, 30)\nh"), "10");
+    assert_eq!(eval("h ++ t = (10, 20, 30)\nt"), "(20, 30)");
+}
+
+#[test]
+fn cons_pattern_string_destructure() {
+    assert_eq!(eval(r#"h ++ t = "abc"
+h"#), r#""a""#);
+    assert_eq!(eval(r#"h ++ t = "abc"
+t"#), r#""bc""#);
+}
+
+#[test]
+fn cons_pattern_set_destructure() {
+    assert_eq!(eval("h ++ t = {1, 2, 3}\nh"), "1");
+    assert_eq!(eval("h ++ t = {1, 2, 3}\nt"), "{2, 3}");
+}
+
+#[test]
+fn cons_pattern_dict_destructure() {
+    // Head is the first entry as a (key, value) tuple — the inverse of how
+    // `++` prepends a `(k, v)` tuple onto a dict.
+    assert_eq!(eval(r#"h ++ t = {"a": 1, "b": 2}
+h"#), r#"("a", 1)"#);
+    assert_eq!(eval(r#"h ++ t = {"a": 1, "b": 2}
+t"#), r#"{"b": 2}"#);
+}
+
+#[test]
+fn cons_pattern_in_match_list() {
+    let src = "match [1, 2, 3]\n  [] -> \"empty\",\n  h ++ t -> t";
+    assert_eq!(eval(src), "[2, 3]");
+}
+
+#[test]
+fn cons_pattern_chained_is_right_assoc() {
+    // `a ++ b ++ rest` peels two elements: a=1, b=2, rest=[3, 4].
+    assert_eq!(eval("a ++ b ++ rest = [1, 2, 3, 4]\nrest"), "[3, 4]");
+    assert_eq!(eval("a ++ b ++ rest = [1, 2, 3, 4]\nb"), "2");
+}
+
+#[test]
+fn cons_pattern_empty_fails_to_match() {
+    let src = "match []\n  h ++ t -> \"non-empty\"";
+    let prog = ff::parser::parse(src).expect("parse");
+    assert!(ff::interpreter::run(&prog).is_err());
+}
+
+#[test]
+fn cons_pattern_literal_head() {
+    // Head can be any pattern, including a literal — matches only when the
+    // first element equals it.
+    let src = "match [1, 2, 3]\n  1 ++ rest -> rest,\n  _ -> [99]";
+    assert_eq!(eval(src), "[2, 3]");
+    let src2 = "match [9, 2, 3]\n  1 ++ rest -> rest,\n  _ -> [99]";
+    assert_eq!(eval(src2), "[99]");
+}
+
 // --- match-as-function ------------------------------------------------------
 
 #[test]

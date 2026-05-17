@@ -183,11 +183,11 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
         Expr::Access { target, key } => {
             let t = eval_expr(target, env)?;
             match (&t, key) {
-                (Value::List(xs), AccessKey::Index(i)) | (Value::Tuple(xs), AccessKey::Index(i)) => {
-                    xs.get(*i).cloned().ok_or_else(|| {
-                        anyhow!("index {} out of range (len {})", i, xs.len())
-                    })
-                }
+                (Value::List(xs), AccessKey::Index(i))
+                | (Value::Tuple(xs), AccessKey::Index(i)) => xs
+                    .get(*i)
+                    .cloned()
+                    .ok_or_else(|| anyhow!("index {} out of range (len {})", i, xs.len())),
                 (Value::Dict(es), AccessKey::Field(name)) => {
                     let k = Value::String(name.clone());
                     es.iter()
@@ -206,7 +206,7 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
         Expr::Unary { op, operand } => {
             let v = eval_expr(operand, env)?;
             match (op, v) {
-                (UnaryOp::Neg, Value::Number(n)) => Ok(Value::Number(Rational::from(-n))),
+                (UnaryOp::Neg, Value::Number(n)) => Ok(Value::Number(-n)),
                 (UnaryOp::Not, Value::Bool(b)) => Ok(Value::Bool(!b)),
                 (op, v) => bail!("cannot apply {:?} to {}", op, type_name(&v)),
             }
@@ -505,14 +505,17 @@ fn rat_mod(a: &Rational, b: &Rational) -> Rational {
     let q = Rational::from(a / b);
     let (num, den) = q.into_numer_denom();
     let trunc = Integer::from(&num / &den);
-    Rational::from(a - Rational::from(b * trunc))
+    a - Rational::from(b * trunc)
 }
 
 // `**` requires an integer exponent; non-integer exponents would produce
 // irrationals that don't fit in Rational.
 fn rat_pow(base: &Rational, exp: &Rational) -> Result<Rational> {
     if exp.denom() != &Integer::from(1) {
-        bail!("** requires an integer exponent, got {}", format_rational(exp));
+        bail!(
+            "** requires an integer exponent, got {}",
+            format_rational(exp)
+        );
     }
     let e_int = exp.numer();
     let e: i32 = e_int
@@ -550,7 +553,7 @@ fn format_rational(r: &Rational) -> String {
         d /= 5u32;
         fives += 1;
     }
-    if d != Integer::from(1) {
+    if d != 1 {
         return format!("{}/{}", num, den);
     }
 

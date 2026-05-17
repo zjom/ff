@@ -17,31 +17,62 @@ ident    = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 wildcard = @{ "_" ~ !(ASCII_ALPHANUMERIC | "_") }
 
 // ----- Operator tokens -----
-power    = { "**" | "^" }
-multiply = { "*" }
-divide   = { "/" }
-modulo   = { "%" }
-add      = { "+" }
-subtract = { "-" }
+// Operator characters. Built-in op tokens forbid an op_char tail so that a
+// longer sequence (e.g. `++`, `+>`) is never consumed as the built-in prefix.
+op_char = _{ "!" | "$" | "%" | "&" | "*" | "+" | "-" | "/"
+           | "<" | "=" | ">" | "?" | "@" | "^" | "|" | "~" }
 
-eq        = { "==" }
-ne        = { "!=" }
-le        = { "<=" }
-ge        = { ">=" }
-lt        = { "<" }
-gt        = { ">" }
-not_match = { "!~" }
-match_op  = { "~" }
+power    = @{ ("**" | "^") ~ !op_char }
+multiply = @{ "*" ~ !op_char }
+divide   = @{ "/" ~ !op_char }
+modulo   = @{ "%" ~ !op_char }
+add      = @{ "+" ~ !op_char }
+subtract = @{ "-" ~ !op_char }
 
-logical_and = { "&&" }
-logical_or  = { "||" }
+eq        = @{ "==" ~ !op_char }
+ne        = @{ "!=" ~ !op_char }
+le        = @{ "<=" ~ !op_char }
+ge        = @{ ">=" ~ !op_char }
+lt        = @{ "<" ~ !op_char }
+gt        = @{ ">" ~ !op_char }
+not_match = @{ "!~" ~ !op_char }
+match_op  = @{ "~" ~ !op_char }
 
-neg         = { "-" }
-logical_not = { "!" }
+logical_and = @{ "&&" ~ !op_char }
+logical_or  = @{ "||" ~ !op_char }
+
+// Prefix `-` and `!` are intentionally single-char (no `!op_char` lookahead)
+// so `--5` and `!!true` keep stacking. `(--)` and `(!!)` can still be defined
+// as custom infix operators since the infix builders look for a leading
+// non-prefix context.
+neg         = @{ "-" }
+logical_not = @{ "!" }
 
 assign = { "=" }
 
-prefix_op  = _{ neg | logical_not }
+// User-defined operators. Each variant is bucketed by first character so the
+// Pratt parser can assign OCaml-style precedence. `=>` and `->` are reserved
+// for function and match arrows so they're excluded from the `=`/`-` buckets.
+custom_op_pow  = @{ "**" ~ op_char+ }
+custom_op_mult = @{ ("*" | "/" | "%") ~ op_char+ }
+custom_op_add  = @{ "+" ~ op_char+ | "-" ~ !">" ~ op_char+ }
+custom_op_cat  = @{ ("^" | "@") ~ op_char* }
+custom_op_comp = @{ ("<" | ">" | "!" | "$") ~ op_char+ | "=" ~ !">" ~ op_char+ }
+custom_op_and  = @{ "&" ~ op_char+ }
+custom_op_or   = @{ "|" ~ op_char+ }
+
+// Prefix operators must start with `?` or `~` and be at least two chars.
+// `!` is excluded so the built-in `!` keeps stacking (`!!true`); custom
+// prefixes named with `!` would be unreachable in prefix position anyway.
+custom_prefix  = @{ ("?" | "~") ~ op_char+ }
+
+// Parenthesized operator name. Acts as an identifier in expressions and
+// patterns so users can bind and reference operators as plain functions:
+// `(++) = (x, y) => x + y`, then `1 ++ 2` or `(++) 1 2` or `(++)(1, 2)`.
+op_paren_name = @{ op_char+ }
+op_paren      = { "(" ~ op_paren_name ~ ")" }
+
+prefix_op  = _{ neg | logical_not | custom_prefix }
 postfix_op = _{ call_args | dot_access | juxt_arg }
 
 // `list.0` for list/tuple index, `dict.foo` for dict string-key lookup.
@@ -60,6 +91,13 @@ infix_op   = _{
     | eq | ne | le | ge | lt | gt
     | logical_and | logical_or
     | not_match | match_op
+    | custom_op_pow
+    | custom_op_mult
+    | custom_op_add
+    | custom_op_cat
+    | custom_op_comp
+    | custom_op_and
+    | custom_op_or
 }
 
 // ----- Patterns -----
@@ -80,9 +118,12 @@ pattern_dict_entry = { expr ~ ":" ~ pattern }
 pattern_dict       = { "{" ~ (pattern_dict_entry ~ ("," ~ pattern_dict_entry)* ~ ","?)? ~ "}" }
 pattern_set        = { "{" ~ pattern ~ ("," ~ pattern)* ~ ","? ~ "}" }
 
-// `wildcard` and `bool` precede `ident` so they aren't shadowed.
+// `wildcard` and `bool` precede `ident` so they aren't shadowed. `op_paren`
+// precedes `pattern_tuple` so `(++)` binds the operator name rather than
+// being attempted as a one-element tuple (which would fail anyway).
 pattern = _{
       pattern_list
+    | op_paren
     | pattern_tuple
     | pattern_dict
     | pattern_set
@@ -155,6 +196,7 @@ primary = _{
     | list
     | dict
     | set
+    | op_paren
     | scope
     | tuple
     | "(" ~ expr ~ ")"

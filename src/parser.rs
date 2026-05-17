@@ -12,21 +12,31 @@ pub struct FFParser;
 
 lazy_static! {
     static ref PRATT: PrattParser<Rule> = PrattParser::new()
-        .op(Op::infix(Rule::logical_or, Assoc::Left))
-        .op(Op::infix(Rule::logical_and, Assoc::Left))
-        .op(Op::infix(Rule::eq, Assoc::Left) | Op::infix(Rule::ne, Assoc::Left))
+        .op(Op::infix(Rule::logical_or, Assoc::Left)
+            | Op::infix(Rule::custom_op_or, Assoc::Left))
+        .op(Op::infix(Rule::logical_and, Assoc::Left)
+            | Op::infix(Rule::custom_op_and, Assoc::Left))
+        .op(Op::infix(Rule::eq, Assoc::Left)
+            | Op::infix(Rule::ne, Assoc::Left)
+            | Op::infix(Rule::custom_op_comp, Assoc::Left))
         .op(Op::infix(Rule::lt, Assoc::Left)
             | Op::infix(Rule::le, Assoc::Left)
             | Op::infix(Rule::gt, Assoc::Left)
             | Op::infix(Rule::ge, Assoc::Left)
             | Op::infix(Rule::match_op, Assoc::Left)
             | Op::infix(Rule::not_match, Assoc::Left))
-        .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::subtract, Assoc::Left))
+        .op(Op::infix(Rule::custom_op_cat, Assoc::Right))
+        .op(Op::infix(Rule::add, Assoc::Left)
+            | Op::infix(Rule::subtract, Assoc::Left)
+            | Op::infix(Rule::custom_op_add, Assoc::Left))
         .op(Op::infix(Rule::multiply, Assoc::Left)
             | Op::infix(Rule::divide, Assoc::Left)
-            | Op::infix(Rule::modulo, Assoc::Left))
-        .op(Op::infix(Rule::power, Assoc::Right))
-        .op(Op::prefix(Rule::neg) | Op::prefix(Rule::logical_not))
+            | Op::infix(Rule::modulo, Assoc::Left)
+            | Op::infix(Rule::custom_op_mult, Assoc::Left))
+        .op(Op::infix(Rule::power, Assoc::Right) | Op::infix(Rule::custom_op_pow, Assoc::Right))
+        .op(Op::prefix(Rule::neg)
+            | Op::prefix(Rule::logical_not)
+            | Op::prefix(Rule::custom_prefix))
         .op(Op::postfix(Rule::call_args)
             | Op::postfix(Rule::dot_access)
             | Op::postfix(Rule::juxt_arg));
@@ -92,6 +102,13 @@ fn build_pattern(pair: Pair<Rule>) -> Result<Pattern> {
                 .map(build_pattern)
                 .collect::<Result<_>>()?,
         )),
+        Rule::op_paren => {
+            let name = pair
+                .into_inner()
+                .next()
+                .ok_or_else(|| anyhow!("empty op_paren"))?;
+            Ok(Pattern::Ident(name.as_str().to_string()))
+        }
         r => Err(anyhow!("unexpected pattern rule: {:?}", r)),
     }
 }
@@ -110,13 +127,19 @@ fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
     PRATT
         .map_primary(build_primary)
         .map_prefix(|op, rhs| {
-            let op = match op.as_rule() {
+            let unary = match op.as_rule() {
                 Rule::neg => UnaryOp::Neg,
                 Rule::logical_not => UnaryOp::Not,
+                Rule::custom_prefix => {
+                    return Ok(Expr::Call {
+                        callee: Box::new(Expr::Ident(op.as_str().to_string())),
+                        args: vec![rhs?],
+                    });
+                }
                 r => return Err(anyhow!("unexpected prefix: {:?}", r)),
             };
             Ok(Expr::Unary {
-                op,
+                op: unary,
                 operand: Box::new(rhs?),
             })
         })
@@ -154,7 +177,7 @@ fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
             r => Err(anyhow!("unexpected postfix: {:?}", r)),
         })
         .map_infix(|lhs, op, rhs| {
-            let op = match op.as_rule() {
+            let binop = match op.as_rule() {
                 Rule::power => BinaryOp::Pow,
                 Rule::multiply => BinaryOp::Mul,
                 Rule::divide => BinaryOp::Div,
@@ -171,10 +194,27 @@ fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
                 Rule::logical_or => BinaryOp::Or,
                 Rule::match_op => BinaryOp::Match,
                 Rule::not_match => BinaryOp::NotMatch,
+                Rule::custom_op_pow
+                | Rule::custom_op_mult
+                | Rule::custom_op_add
+                | Rule::custom_op_cat
+                | Rule::custom_op_comp
+                | Rule::custom_op_and
+                | Rule::custom_op_or => {
+                    // Curried call: `a OP b` desugars to `(OP)(a)(b)`.
+                    let name = Expr::Ident(op.as_str().to_string());
+                    return Ok(Expr::Call {
+                        callee: Box::new(Expr::Call {
+                            callee: Box::new(name),
+                            args: vec![lhs?],
+                        }),
+                        args: vec![rhs?],
+                    });
+                }
                 r => return Err(anyhow!("unexpected infix: {:?}", r)),
             };
             Ok(Expr::Binary {
-                op,
+                op: binop,
                 lhs: Box::new(lhs?),
                 rhs: Box::new(rhs?),
             })
@@ -188,6 +228,13 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
         Rule::string => Ok(Expr::String(unquote(pair.as_str()))),
         Rule::bool => Ok(Expr::Bool(pair.as_str() == "true")),
         Rule::ident => Ok(Expr::Ident(pair.as_str().to_string())),
+        Rule::op_paren => {
+            let name = pair
+                .into_inner()
+                .next()
+                .ok_or_else(|| anyhow!("empty op_paren"))?;
+            Ok(Expr::Ident(name.as_str().to_string()))
+        }
         Rule::list => Ok(Expr::List(
             pair.into_inner().map(build_expr).collect::<Result<_>>()?,
         )),

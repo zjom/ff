@@ -105,21 +105,21 @@ dict       = { "{" ~ (dict_entry ~ ("," ~ dict_entry)* ~ ","?)? ~ "}" }
 set        = { "{" ~ expr ~ ("," ~ expr)* ~ ","? ~ "}" }
 
 // ----- Scope (block expression) -----
-// Rust-like: `{ stmts }`. Evaluates statements in order in a child environment
-// that captures the enclosing lexical scope; new bindings are local to the
-// block. The block's value is the value of the last statement (Unit if that
-// statement is an assignment). To disambiguate from set/dict, a scope must
-// contain either a single assignment or two-plus newline-separated statements.
-// `{x}` remains a single-element set; `{x = 1}` is a scope.
+// `( stmts )`. Evaluates statements in order in a child environment that
+// captures the enclosing lexical scope; new bindings are local to the block.
+// The block's value is the value of the last statement (Unit if that statement
+// is an assignment). To disambiguate from tuple / parenthesized-expression, a
+// scope must contain either a single assignment or two-plus newline-separated
+// statements. `(x)` remains a parenthesized expression; `(x = 1)` is a scope.
 scope = {
-      "{" ~ NEWLINE* ~ statement ~ (NEWLINE+ ~ statement)+ ~ NEWLINE* ~ "}"
-    | "{" ~ NEWLINE* ~ assignment ~ NEWLINE* ~ "}"
+      "(" ~ NEWLINE* ~ statement ~ (NEWLINE+ ~ statement)+ ~ NEWLINE* ~ ")"
+    | "(" ~ NEWLINE* ~ assignment ~ NEWLINE* ~ ")"
 }
 
 // ----- Function literal -----
-// A single-parameter function may drop the parens: `x -> body` == `(x) -> body`.
+// A single-parameter function may drop the parens: `x => body` == `(x) => body`.
 params   = { "(" ~ (ident ~ ("," ~ ident)* ~ ","?)? ~ ")" }
-function = { (params | ident) ~ "->" ~ expr }
+function = { (params | ident) ~ "=>" ~ expr }
 
 // ----- If expression -----
 if_expr = { "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr }
@@ -142,8 +142,9 @@ match_expr = {
 call_args = { "(" ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ ")" }
 
 // ----- Primary expression -----
-// `scope` precedes `dict`/`set` so `{x = 1}` and multi-statement blocks bind as
-// blocks rather than failing the collection rules.
+// `scope` precedes `tuple` / `(expr)` so `(x = 1)` and multi-statement blocks
+// bind as blocks rather than failing the tuple/expr rules. `function` is first
+// so `(x) => body` is read as a function rather than a parenthesized `x`.
 primary = _{
       function
     | match_expr
@@ -152,9 +153,9 @@ primary = _{
     | string
     | bool
     | list
-    | scope
     | dict
     | set
+    | scope
     | tuple
     | "(" ~ expr ~ ")"
     | ident

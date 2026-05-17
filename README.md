@@ -25,10 +25,12 @@ ok = true
 ### Numbers, strings, booleans
 
 ```
-1        2.5        0.0
+1        2.5        0.0      2**200
 "hi"     "\" not yet supported"
 true     false
 ```
+
+numbers are arbitrary precision
 
 Strings are plain text between `"`; there are currently no escape sequences.
 
@@ -67,27 +69,27 @@ than as a single decimal index.
 
 ### Functions
 
-Functions are introduced with `(params) -> body`. Multi-parameter functions are
+Functions are introduced with `(params) => body`. Multi-parameter functions are
 sugar for curried single-parameter functions, and multi-argument calls are sugar
 for chained calls:
 
 ```
-add = (x, y) -> x + y     # same as (x) -> (y) -> x + y
+add = (x, y) => x + y     # same as (x) => (y) => x + y
 add(3, 4)                 # => 7
 add(3)(4)                 # => 7  — same call
 inc = add(1)              # partial application
 inc(10)                   # => 11
 
-noargs = () -> 42         # zero-arg functions are preserved
+noargs = () => 42         # zero-arg functions are preserved
 noargs()                  # => 42
 ```
 
 For one-argument functions, the parens are optional on both sides:
 
 ```
-inc = x -> x + 1          # same as (x) -> x + 1
+inc = x => x + 1          # same as (x) => x + 1
 inc 5                     # => 6  — same as inc(5)
-add = x -> y -> x + y     # right-associative arrow; same as (x, y) -> x + y
+add = x => y => x + y     # right-associative arrow; same as (x, y) => x + y
 add 3 4                   # => 7  — same as add(3)(4)
 ```
 
@@ -99,7 +101,7 @@ Recursion works because the closure captures a shared handle to the scope it
 was defined in:
 
 ```
-fact = (n) -> if n == 0 then 1 else n * fact(n - 1)
+fact = (n) => if n == 0 then 1 else n * fact(n - 1)
 fact(6)                   # => 720
 ```
 

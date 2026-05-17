@@ -10,7 +10,11 @@ fn undefined_variable() {
 #[test]
 fn type_error_arithmetic() {
     let msg = eval_err(r#"1 + "two""#);
-    assert!(msg.contains("Add") || msg.contains("number"), "got: {}", msg);
+    assert!(
+        msg.contains("Add") || msg.contains("number"),
+        "got: {}",
+        msg
+    );
 }
 
 #[test]
@@ -27,9 +31,13 @@ fn call_non_function() {
 
 #[test]
 fn arity_mismatch() {
-    let msg = eval_err("f = (x) -> x\nf(1, 2)");
+    let msg = eval_err("f = (x) => x\nf(1, 2)");
     // Currying means f(1, 2) = f(1)(2); the result is `1` and we call `1(2)`.
-    assert!(msg.contains("non-function") || msg.contains("expects"), "got: {}", msg);
+    assert!(
+        msg.contains("non-function") || msg.contains("expects"),
+        "got: {}",
+        msg
+    );
 }
 
 #[test]

@@ -302,7 +302,7 @@ fn parse_number(s: &str) -> Result<Rational> {
     }
 }
 
-// Multi-param `(x, y, z) -> body` desugars to `(x) -> (y) -> (z) -> body`.
+// Multi-param `(x, y, z) => body` desugars to `(x) => (y) => (z) => body`.
 // Zero-param functions are preserved as-is.
 fn curry_function(params: Vec<String>, body: Expr) -> Expr {
     if params.len() <= 1 {

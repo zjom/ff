@@ -47,6 +47,7 @@ impl std::fmt::Debug for NativeFn {
 pub struct Ctx {
     pub out: RefCell<Box<dyn Write>>,
     pub current_file: RefCell<Option<PathBuf>>,
+    pub is_interactive: bool,
 }
 
 impl Ctx {
@@ -54,6 +55,7 @@ impl Ctx {
         Rc::new(Ctx {
             out: RefCell::new(Box::new(std::io::stdout())),
             current_file: RefCell::new(None),
+            is_interactive: true,
         })
     }
 
@@ -61,6 +63,7 @@ impl Ctx {
         Rc::new(Ctx {
             out: RefCell::new(Box::new(std::io::stdout())),
             current_file: RefCell::new(Some(path)),
+            is_interactive: false,
         })
     }
 }

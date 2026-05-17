@@ -17,8 +17,14 @@ pub fn members() -> Vec<(&'static str, Value)> {
             "print",
             native!("io.print", 1, |env, args| {
                 let s = render(&args[0]);
-                write!(ctx_of(env).out.borrow_mut(), "{}", s)
-                    .map_err(|e| anyhow::anyhow!("io error: {}", e))?;
+                let ctx = ctx_of(env);
+                if ctx.is_interactive {
+                    writeln!(ctx_of(env).out.borrow_mut(), "{}", s)
+                        .map_err(|e| anyhow::anyhow!("io error: {}", e))?;
+                } else {
+                    write!(ctx_of(env).out.borrow_mut(), "{}", s)
+                        .map_err(|e| anyhow::anyhow!("io error: {}", e))?;
+                }
                 Ok(Value::Unit)
             }),
         ),

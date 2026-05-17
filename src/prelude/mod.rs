@@ -8,7 +8,10 @@ pub fn install(env: &Env) {
 }
 
 fn define_module(env: &Env, name: &'static str, members: Vec<(&'static str, Value)>) {
-    let members = members.into_iter().map(|(k, v)| (k.to_string(), v)).collect::<HashMap<_, _>>();
+    let members = members
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect::<HashMap<_, _>>();
     define(env, name, Value::Module { name, members });
 }
 

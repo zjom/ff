@@ -528,15 +528,9 @@ fn match_into(
         // first element (and rebuild the tail in the same shape) for any value
         // type the operator can construct.
         Pattern::Cons { head, tail } => match val {
-            Value::List(xs) => match_cons_seq(head, tail, xs, env, bindings, |t| {
-                Value::List(t)
-            }),
-            Value::Tuple(xs) => match_cons_seq(head, tail, xs, env, bindings, |t| {
-                Value::Tuple(t)
-            }),
-            Value::Set(xs) => {
-                match_cons_seq(head, tail, xs, env, bindings, |t| Value::Set(t))
-            }
+            Value::List(xs) => match_cons_seq(head, tail, xs, env, bindings, Value::List),
+            Value::Tuple(xs) => match_cons_seq(head, tail, xs, env, bindings, Value::Tuple),
+            Value::Set(xs) => match_cons_seq(head, tail, xs, env, bindings, Value::Set),
             Value::String(s) => {
                 let Some(first) = s.chars().next() else {
                     return Ok(false);

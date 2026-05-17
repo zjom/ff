@@ -1,3 +1,4 @@
+use crate::ast::Program;
 use crate::interpreter::{Env, Scope, Value, eval_program};
 use crate::parser::parse;
 use std::io::{self, BufRead, Write};
@@ -69,7 +70,7 @@ pub fn run() {
     }
 }
 
-fn run_program(program: &crate::ast::Program, env: &Env) {
+fn run_program(program: &Program, env: &Env) {
     match eval_program(program, env) {
         Ok(Value::Unit) => {}
         Ok(v) => println!("{}", v),

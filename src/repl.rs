@@ -1,12 +1,10 @@
-use std::path::PathBuf;
-
 use crate::ast::Program;
 use crate::interpreter::{Env, Scope, Value, eval_program};
 use crate::parser::parse;
 use rustyline::error::ReadlineError;
 use rustyline::history::FileHistory;
 use rustyline::validate::{ValidationContext, ValidationResult, Validator};
-use rustyline::{ColorMode, Completer, EditMode, Editor, Helper, Highlighter, Hinter};
+use rustyline::{Completer, Editor, Helper, Highlighter, Hinter};
 
 #[derive(Completer, Helper, Highlighter, Hinter)]
 struct REPLHelper {}
@@ -80,39 +78,22 @@ fn ends_with_continuation_comma(s: &str) -> bool {
     last == Some(',')
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, bon::Builder)]
-pub struct Config {
-    #[builder(default = EditMode::Vi)]
-    edit_mode: EditMode,
-    #[builder(default = ColorMode::Enabled)]
-    color_mode: ColorMode,
-
-    #[builder(default = ".ff_history", into)]
-    history_path: PathBuf,
-    #[builder(default = false)]
-    should_write_history: bool,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Config::builder().build()
-    }
-}
+use crate::cli::ReplConfig;
 
 pub struct Repl {
-    cfg: Config,
+    cfg: ReplConfig,
     rl: Editor<REPLHelper, FileHistory>,
 }
 
 impl Repl {
     pub fn new() -> Self {
-        let cfg: Config = Default::default();
+        let cfg: ReplConfig = Default::default();
         Self::with_config(cfg).unwrap()
     }
-    pub fn with_config(cfg: Config) -> anyhow::Result<Self> {
+    pub fn with_config(cfg: ReplConfig) -> anyhow::Result<Self> {
         let rlcfg = rustyline::Config::builder()
-            .edit_mode(cfg.edit_mode)
-            .color_mode(cfg.color_mode)
+            .edit_mode(cfg.edit_mode.into())
+            .color_mode(cfg.color_mode.into())
             .build();
         let helper = REPLHelper {};
         let mut rl = Editor::with_config(rlcfg)?;
@@ -180,9 +161,9 @@ impl Default for Repl {
     }
 }
 
-impl TryFrom<Config> for Repl {
+impl TryFrom<ReplConfig> for Repl {
     type Error = anyhow::Error;
-    fn try_from(value: Config) -> Result<Self, Self::Error> {
+    fn try_from(value: ReplConfig) -> Result<Self, Self::Error> {
         Self::with_config(value)
     }
 }

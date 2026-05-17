@@ -126,6 +126,7 @@ impl Repl {
 
     pub fn run(&mut self) -> anyhow::Result<()> {
         let env = Scope::new();
+        crate::prelude::install(&env);
         println!("ff self — Ctrl-D to exit, blank line to submit/abort multi-line input");
         loop {
             let prompt = ">> ";

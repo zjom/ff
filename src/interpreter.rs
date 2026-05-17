@@ -3,6 +3,7 @@ use anyhow::{Result, anyhow, bail};
 use rug::{Integer, Rational};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::io::Write;
 use std::rc::Rc;
 
 #[derive(Debug, Clone)]
@@ -20,27 +21,79 @@ pub enum Value {
         body: Expr,
         env: Env,
     },
+    Native {
+        name: &'static str,
+        arity: usize,
+        applied: Vec<Value>,
+        f: NativeFn,
+    },
+    Module {
+        name: &'static str,
+        members: HashMap<String, Value>,
+    },
+}
+
+#[derive(Clone)]
+pub struct NativeFn(pub Rc<dyn Fn(&Ctx, &[Value]) -> Result<Value>>);
+
+impl std::fmt::Debug for NativeFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<native fn>")
+    }
+}
+
+pub struct Ctx {
+    pub out: RefCell<Box<dyn Write>>,
+}
+
+impl Ctx {
+    pub fn stdio() -> Rc<Self> {
+        Rc::new(Ctx {
+            out: RefCell::new(Box::new(std::io::stdout())),
+        })
+    }
+}
+
+impl std::fmt::Debug for Ctx {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Ctx")
+    }
 }
 
 pub type Env = Rc<RefCell<Scope>>;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Scope {
     vars: HashMap<String, Value>,
     parent: Option<Env>,
+    ctx: Rc<Ctx>,
 }
 
 impl Scope {
     pub fn new() -> Env {
-        Rc::new(RefCell::new(Scope::default()))
+        Self::with_ctx(Ctx::stdio())
+    }
+
+    pub fn with_ctx(ctx: Rc<Ctx>) -> Env {
+        Rc::new(RefCell::new(Scope {
+            vars: HashMap::new(),
+            parent: None,
+            ctx,
+        }))
     }
 
     fn child(parent: Env) -> Env {
+        let ctx = parent.borrow().ctx.clone();
         Rc::new(RefCell::new(Scope {
             vars: HashMap::new(),
             parent: Some(parent),
+            ctx,
         }))
     }
+}
+
+fn ctx_of(env: &Env) -> Rc<Ctx> {
+    env.borrow().ctx.clone()
 }
 
 fn lookup(env: &Env, name: &str) -> Option<Value> {
@@ -51,12 +104,14 @@ fn lookup(env: &Env, name: &str) -> Option<Value> {
     parent.and_then(|p| lookup(&p, name))
 }
 
-fn define(env: &Env, name: &str, val: Value) {
+pub fn define(env: &Env, name: &str, val: Value) {
     env.borrow_mut().vars.insert(name.to_string(), val);
 }
 
 pub fn run(program: &Program) -> Result<Value> {
-    eval_program(program, &Scope::new())
+    let env = Scope::new();
+    crate::prelude::install(&env);
+    eval_program(program, &env)
 }
 
 pub fn eval_program(program: &Program, env: &Env) -> Result<Value> {
@@ -177,6 +232,38 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                     }
                     eval_expr(&body, &scope)
                 }
+                Value::Native {
+                    name,
+                    arity,
+                    mut applied,
+                    f,
+                } => {
+                    let ctx = ctx_of(env);
+                    if arg_vals.is_empty() {
+                        if arity == 0 && applied.is_empty() {
+                            return (f.0)(&ctx, &[]);
+                        }
+                        bail!(
+                            "native `{}` expects {} arg(s), got {}",
+                            name,
+                            arity,
+                            applied.len()
+                        );
+                    }
+                    applied.extend(arg_vals);
+                    if applied.len() == arity {
+                        (f.0)(&ctx, &applied)
+                    } else if applied.len() < arity {
+                        Ok(Value::Native {
+                            name,
+                            arity,
+                            applied,
+                            f,
+                        })
+                    } else {
+                        bail!("native `{}` over-applied (arity {})", name, arity)
+                    }
+                }
                 v => bail!("cannot call non-function: {}", type_name(&v)),
             }
         }
@@ -195,6 +282,10 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                         .map(|(_, v)| v.clone())
                         .ok_or_else(|| anyhow!("dict has no key {:?}", name))
                 }
+                (Value::Module { members, .. }, AccessKey::Field(name)) => members
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| anyhow!("module has no member `.{}`", name)),
                 (v, AccessKey::Index(_)) => {
                     bail!("cannot index into {}", type_name(v))
                 }
@@ -496,6 +587,8 @@ impl std::fmt::Display for Value {
                 write!(f, "}}")
             }
             Value::Function { params, .. } => write!(f, "<fn ({})>", params.join(", ")),
+            Value::Native { name, .. } => write!(f, "<native {}>", name),
+            Value::Module { name, .. } => write!(f, "<module {}>", name),
         }
     }
 }
@@ -598,5 +691,7 @@ fn type_name(v: &Value) -> &'static str {
         Value::Dict(_) => "dict",
         Value::Set(_) => "set",
         Value::Function { .. } => "function",
+        Value::Native { .. } => "native",
+        Value::Module { .. } => "module",
     }
 }

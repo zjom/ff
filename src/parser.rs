@@ -4,6 +4,7 @@ use lazy_static::lazy_static;
 use pest::Parser;
 use pest::iterators::Pair;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
+use rug::{Integer, Rational};
 
 #[derive(pest_derive::Parser)]
 #[grammar = "ff.pest"]
@@ -62,7 +63,7 @@ fn build_pattern(pair: Pair<Rule>) -> Result<Pattern> {
     match pair.as_rule() {
         Rule::wildcard => Ok(Pattern::Wildcard),
         Rule::ident => Ok(Pattern::Ident(pair.as_str().to_string())),
-        Rule::number => Ok(Pattern::Number(pair.as_str().parse()?)),
+        Rule::number => Ok(Pattern::Number(parse_number(pair.as_str())?)),
         Rule::string => Ok(Pattern::String(unquote(pair.as_str()))),
         Rule::bool => Ok(Pattern::Bool(pair.as_str() == "true")),
         Rule::pattern_list => Ok(Pattern::List(
@@ -183,7 +184,7 @@ fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
 
 fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
     match pair.as_rule() {
-        Rule::number => Ok(Expr::Number(pair.as_str().parse()?)),
+        Rule::number => Ok(Expr::Number(parse_number(pair.as_str())?)),
         Rule::string => Ok(Expr::String(unquote(pair.as_str()))),
         Rule::bool => Ok(Expr::Bool(pair.as_str() == "true")),
         Rule::ident => Ok(Expr::Ident(pair.as_str().to_string())),
@@ -280,6 +281,25 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
 
 fn unquote(s: &str) -> String {
     s[1..s.len() - 1].to_string()
+}
+
+// The grammar guarantees `ASCII_DIGIT+ ("." ASCII_DIGIT*)?`, so the integer
+// part is always present; the fractional part may be empty (e.g. "3.").
+fn parse_number(s: &str) -> Result<Rational> {
+    match s.find('.') {
+        None => Ok(Rational::from(Integer::from_str_radix(s, 10)?)),
+        Some(dot) => {
+            let int_part = &s[..dot];
+            let frac_part = &s[dot + 1..];
+            let combined = format!("{}{}", int_part, frac_part);
+            let num = Integer::from_str_radix(&combined, 10)?;
+            let mut den = Integer::from(1);
+            for _ in 0..frac_part.len() {
+                den *= 10u32;
+            }
+            Ok(Rational::from((num, den)))
+        }
+    }
 }
 
 // Multi-param `(x, y, z) -> body` desugars to `(x) -> (y) -> (z) -> body`.

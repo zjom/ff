@@ -17,7 +17,7 @@ pub struct Assignment {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
-    Number(f64),
+    Number(rug::Rational),
     String(String),
     Bool(bool),
     Ident(String),
@@ -68,7 +68,7 @@ pub struct MatchArm {
 pub enum Pattern {
     Wildcard,
     Ident(String),
-    Number(f64),
+    Number(rug::Rational),
     String(String),
     Bool(bool),
     List(Vec<PatternItem>),

@@ -8,3 +8,4 @@ pest = "2.8"
 pest_derive = "2.8"
 anyhow = "1"
 lazy_static = "1.4"
+rug = { version = "1.27", default-features = false, features = ["rational"] }

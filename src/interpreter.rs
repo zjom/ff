@@ -1,5 +1,6 @@
 use crate::ast::*;
 use anyhow::{Result, anyhow, bail};
+use rug::{Integer, Rational};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -7,7 +8,7 @@ use std::rc::Rc;
 #[derive(Debug, Clone)]
 pub enum Value {
     Unit,
-    Number(f64),
+    Number(Rational),
     String(String),
     Bool(bool),
     List(Vec<Value>),
@@ -83,7 +84,7 @@ fn eval_statement(stmt: &Statement, env: &Env) -> Result<Value> {
 
 fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
     match expr {
-        Expr::Number(n) => Ok(Value::Number(*n)),
+        Expr::Number(n) => Ok(Value::Number(n.clone())),
         Expr::String(s) => Ok(Value::String(s.clone())),
         Expr::Bool(b) => Ok(Value::Bool(*b)),
         Expr::Ident(name) => {
@@ -205,7 +206,7 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
         Expr::Unary { op, operand } => {
             let v = eval_expr(operand, env)?;
             match (op, v) {
-                (UnaryOp::Neg, Value::Number(n)) => Ok(Value::Number(-n)),
+                (UnaryOp::Neg, Value::Number(n)) => Ok(Value::Number(Rational::from(-n))),
                 (UnaryOp::Not, Value::Bool(b)) => Ok(Value::Bool(!b)),
                 (op, v) => bail!("cannot apply {:?} to {}", op, type_name(&v)),
             }
@@ -243,12 +244,28 @@ fn eval_binary(op: BinaryOp, lhs: &Expr, rhs: &Expr, env: &Env) -> Result<Value>
     let l = eval_expr(lhs, env)?;
     let r = eval_expr(rhs, env)?;
     match (op, &l, &r) {
-        (BinaryOp::Add, Value::Number(a), Value::Number(b)) => Ok(Value::Number(a + b)),
-        (BinaryOp::Sub, Value::Number(a), Value::Number(b)) => Ok(Value::Number(a - b)),
-        (BinaryOp::Mul, Value::Number(a), Value::Number(b)) => Ok(Value::Number(a * b)),
-        (BinaryOp::Div, Value::Number(a), Value::Number(b)) => Ok(Value::Number(a / b)),
-        (BinaryOp::Mod, Value::Number(a), Value::Number(b)) => Ok(Value::Number(a % b)),
-        (BinaryOp::Pow, Value::Number(a), Value::Number(b)) => Ok(Value::Number(a.powf(*b))),
+        (BinaryOp::Add, Value::Number(a), Value::Number(b)) => {
+            Ok(Value::Number(Rational::from(a + b)))
+        }
+        (BinaryOp::Sub, Value::Number(a), Value::Number(b)) => {
+            Ok(Value::Number(Rational::from(a - b)))
+        }
+        (BinaryOp::Mul, Value::Number(a), Value::Number(b)) => {
+            Ok(Value::Number(Rational::from(a * b)))
+        }
+        (BinaryOp::Div, Value::Number(a), Value::Number(b)) => {
+            if b.cmp0() == std::cmp::Ordering::Equal {
+                bail!("division by zero");
+            }
+            Ok(Value::Number(Rational::from(a / b)))
+        }
+        (BinaryOp::Mod, Value::Number(a), Value::Number(b)) => {
+            if b.cmp0() == std::cmp::Ordering::Equal {
+                bail!("modulo by zero");
+            }
+            Ok(Value::Number(rat_mod(a, b)))
+        }
+        (BinaryOp::Pow, Value::Number(a), Value::Number(b)) => Ok(Value::Number(rat_pow(a, b)?)),
         (BinaryOp::Add, Value::String(a), Value::String(b)) => {
             Ok(Value::String(format!("{}{}", a, b)))
         }
@@ -432,7 +449,7 @@ impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Unit => Ok(()),
-            Value::Number(n) => write!(f, "{}", n),
+            Value::Number(n) => write!(f, "{}", format_rational(n)),
             Value::String(s) => write!(f, "{:?}", s),
             Value::Bool(b) => write!(f, "{}", b),
             Value::List(xs) => {
@@ -481,6 +498,90 @@ impl std::fmt::Display for Value {
             Value::Function { params, .. } => write!(f, "<fn ({})>", params.join(", ")),
         }
     }
+}
+
+// Truncated-toward-zero modulo on rationals: a - b * trunc(a / b).
+fn rat_mod(a: &Rational, b: &Rational) -> Rational {
+    let q = Rational::from(a / b);
+    let (num, den) = q.into_numer_denom();
+    let trunc = Integer::from(&num / &den);
+    Rational::from(a - Rational::from(b * trunc))
+}
+
+// `**` requires an integer exponent; non-integer exponents would produce
+// irrationals that don't fit in Rational.
+fn rat_pow(base: &Rational, exp: &Rational) -> Result<Rational> {
+    if exp.denom() != &Integer::from(1) {
+        bail!("** requires an integer exponent, got {}", format_rational(exp));
+    }
+    let e_int = exp.numer();
+    let e: i32 = e_int
+        .to_i32()
+        .ok_or_else(|| anyhow!("** exponent out of range: {}", e_int))?;
+    if e == 0 {
+        return Ok(Rational::from(1));
+    }
+    if base.cmp0() == std::cmp::Ordering::Equal && e < 0 {
+        bail!("0 cannot be raised to a negative power");
+    }
+    use rug::ops::Pow;
+    Ok(base.clone().pow(e))
+}
+
+// Display a rational as the most natural decimal form:
+// - integer when denom == 1
+// - terminating decimal (e.g. 5/2 -> "2.5") when denom is 2^a * 5^b
+// - otherwise the canonical "n/d" form
+fn format_rational(r: &Rational) -> String {
+    let num = r.numer();
+    let den = r.denom();
+    if den == &Integer::from(1) {
+        return num.to_string();
+    }
+
+    let mut d = den.clone();
+    let mut twos: u32 = 0;
+    while d.is_divisible_u(2) {
+        d /= 2u32;
+        twos += 1;
+    }
+    let mut fives: u32 = 0;
+    while d.is_divisible_u(5) {
+        d /= 5u32;
+        fives += 1;
+    }
+    if d != Integer::from(1) {
+        return format!("{}/{}", num, den);
+    }
+
+    let power = twos.max(fives);
+    let mut scaled = num.clone().abs();
+    let mut extra_twos = power - twos;
+    while extra_twos > 0 {
+        scaled *= 2u32;
+        extra_twos -= 1;
+    }
+    let mut extra_fives = power - fives;
+    while extra_fives > 0 {
+        scaled *= 5u32;
+        extra_fives -= 1;
+    }
+
+    let sign = if num.cmp0() == std::cmp::Ordering::Less {
+        "-"
+    } else {
+        ""
+    };
+    let digits = scaled.to_string();
+    let p = power as usize;
+    let padded = if digits.len() <= p {
+        let pad = "0".repeat(p - digits.len() + 1);
+        format!("{}{}", pad, digits)
+    } else {
+        digits
+    };
+    let split = padded.len() - p;
+    format!("{}{}.{}", sign, &padded[..split], &padded[split..])
 }
 
 fn type_name(v: &Value) -> &'static str {

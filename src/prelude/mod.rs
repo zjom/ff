@@ -10,8 +10,6 @@ use std::path::PathBuf;
 pub mod io;
 
 pub fn install(env: &Env) {
-    define_module(env, "io", io::members());
-
     // `x |> f` desugars (via custom_op_or in the grammar) to `((|>)(x))(f)`,
     // so this is an arity-2 native; the interpreter handles the partial
     // application after the first argument.
@@ -31,6 +29,9 @@ pub fn install(env: &Env) {
                 Value::String(s) => s.clone(),
                 v => bail!("import expects string, got {}", type_name(v)),
             };
+            if let Some(m) = native_module(&path_str) {
+                return Ok(m);
+            }
             let ctx = ctx_of(env);
             let resolved = match ctx.current_file.borrow().as_ref() {
                 Some(p) => p
@@ -61,19 +62,18 @@ pub fn install(env: &Env) {
     );
 }
 
-fn define_module(env: &Env, name: &'static str, members: Vec<(&'static str, Value)>) {
-    let members = members
-        .into_iter()
-        .map(|(k, v)| (k.to_string(), v))
-        .collect::<HashMap<_, _>>();
-    define(
-        env,
-        name,
-        Value::Module {
-            name: name.to_string(),
-            members,
-        },
-    );
+fn native_module(name: &str) -> Option<Value> {
+    let members = match name {
+        "io" => io::members(),
+        _ => return None,
+    };
+    Some(Value::Module {
+        name: name.to_string(),
+        members: members
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect::<HashMap<_, _>>(),
+    })
 }
 
 // Build a `Value::Native` with the given name, arity, and body. The body is

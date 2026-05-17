@@ -4,6 +4,7 @@ use rug::{Integer, Rational};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 #[derive(Debug, Clone)]
@@ -28,7 +29,7 @@ pub enum Value {
         f: NativeFn,
     },
     Module {
-        name: &'static str,
+        name: String,
         members: HashMap<String, Value>,
     },
 }
@@ -44,12 +45,21 @@ impl std::fmt::Debug for NativeFn {
 
 pub struct Ctx {
     pub out: RefCell<Box<dyn Write>>,
+    pub current_file: RefCell<Option<PathBuf>>,
 }
 
 impl Ctx {
     pub fn stdio() -> Rc<Self> {
         Rc::new(Ctx {
             out: RefCell::new(Box::new(std::io::stdout())),
+            current_file: RefCell::new(None),
+        })
+    }
+
+    pub fn stdio_with_file(path: PathBuf) -> Rc<Self> {
+        Rc::new(Ctx {
+            out: RefCell::new(Box::new(std::io::stdout())),
+            current_file: RefCell::new(Some(path)),
         })
     }
 }
@@ -82,7 +92,7 @@ impl Scope {
         }))
     }
 
-    fn child(parent: Env) -> Env {
+    pub fn child(parent: Env) -> Env {
         let ctx = parent.borrow().ctx.clone();
         Rc::new(RefCell::new(Scope {
             vars: HashMap::new(),
@@ -94,6 +104,10 @@ impl Scope {
 
 pub fn ctx_of(env: &Env) -> Rc<Ctx> {
     env.borrow().ctx.clone()
+}
+
+pub fn local_vars(env: &Env) -> HashMap<String, Value> {
+    env.borrow().vars.clone()
 }
 
 fn lookup(env: &Env, name: &str) -> Option<Value> {
@@ -686,7 +700,7 @@ fn format_rational(r: &Rational) -> String {
     format!("{}{}.{}", sign, &padded[..split], &padded[split..])
 }
 
-fn type_name(v: &Value) -> &'static str {
+pub fn type_name(v: &Value) -> &'static str {
     match v {
         Value::Unit => "unit",
         Value::Number(_) => "number",

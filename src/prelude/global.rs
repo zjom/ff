@@ -26,9 +26,8 @@ fn cons() -> Value {
                 Ok(Value::List(xs))
             }
 
-            (Value::String(mut left), Value::String(right)) => {
-                left.push_str(right.as_str());
-                Ok(Value::String(left))
+            (Value::String(left), Value::String(right)) => {
+                Ok(Value::String(format!("{}{}", left, right).into()))
             }
 
             (v, Value::Tuple(mut xs)) => {

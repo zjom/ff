@@ -11,8 +11,8 @@ use std::rc::Rc;
 #[derive(Debug, Clone)]
 pub enum Value {
     Unit,
-    Number(Rational),
-    String(String),
+    Number(Rc<Rational>),
+    String(Rc<str>),
     Bool(bool),
     List(Vector<Value>),
     Tuple(Vector<Value>),
@@ -251,8 +251,8 @@ fn eval_statement(stmt: &Statement, env: &Env) -> Result<Value> {
 
 fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
     match expr {
-        Expr::Number(n) => Ok(Value::Number(n.clone())),
-        Expr::String(s) => Ok(Value::String(s.clone())),
+        Expr::Number(n) => Ok(Value::Number(Rc::new(n.clone()))),
+        Expr::String(s) => Ok(Value::String(s.as_str().into())),
         Expr::Bool(b) => Ok(Value::Bool(*b)),
         Expr::Ident(name) => {
             lookup(env, name).ok_or_else(|| anyhow!("undefined variable: {}", name))
@@ -343,7 +343,7 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                     .cloned()
                     .ok_or_else(|| anyhow!("index {} out of range (len {})", i, xs.len())),
                 (Value::Dict(es), AccessKey::Field(name)) => {
-                    let k = Value::String(name.clone());
+                    let k = Value::String(name.as_str().into());
                     es.iter()
                         .find(|(ek, _)| ek == &k)
                         .map(|(_, v)| v.clone())
@@ -364,7 +364,9 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
         Expr::Unary { op, operand } => {
             let v = eval_expr(operand, env)?;
             match (op, v) {
-                (UnaryOp::Neg, Value::Number(n)) => Ok(Value::Number(-n)),
+                (UnaryOp::Neg, Value::Number(n)) => {
+                    Ok(Value::Number(Rc::new(Rational::from(-n.as_ref()))))
+                }
                 (UnaryOp::Not, Value::Bool(b)) => Ok(Value::Bool(!b)),
                 (op, v) => bail!("cannot apply {:?} to {}", op, type_name(&v)),
             }
@@ -402,30 +404,34 @@ fn eval_binary(op: BinaryOp, lhs: &Expr, rhs: &Expr, env: &Env) -> Result<Value>
     let l = eval_expr(lhs, env)?;
     let r = eval_expr(rhs, env)?;
     match (op, &l, &r) {
-        (BinaryOp::Add, Value::Number(a), Value::Number(b)) => {
-            Ok(Value::Number(Rational::from(a + b)))
-        }
-        (BinaryOp::Sub, Value::Number(a), Value::Number(b)) => {
-            Ok(Value::Number(Rational::from(a - b)))
-        }
-        (BinaryOp::Mul, Value::Number(a), Value::Number(b)) => {
-            Ok(Value::Number(Rational::from(a * b)))
-        }
+        (BinaryOp::Add, Value::Number(a), Value::Number(b)) => Ok(Value::Number(Rc::new(
+            Rational::from(a.as_ref() + b.as_ref()),
+        ))),
+        (BinaryOp::Sub, Value::Number(a), Value::Number(b)) => Ok(Value::Number(Rc::new(
+            Rational::from(a.as_ref() - b.as_ref()),
+        ))),
+        (BinaryOp::Mul, Value::Number(a), Value::Number(b)) => Ok(Value::Number(Rc::new(
+            Rational::from(a.as_ref() * b.as_ref()),
+        ))),
         (BinaryOp::Div, Value::Number(a), Value::Number(b)) => {
             if b.cmp0() == std::cmp::Ordering::Equal {
                 bail!("division by zero");
             }
-            Ok(Value::Number(Rational::from(a / b)))
+            Ok(Value::Number(Rc::new(Rational::from(
+                a.as_ref() / b.as_ref(),
+            ))))
         }
         (BinaryOp::Mod, Value::Number(a), Value::Number(b)) => {
             if b.cmp0() == std::cmp::Ordering::Equal {
                 bail!("modulo by zero");
             }
-            Ok(Value::Number(rat_mod(a, b)))
+            Ok(Value::Number(Rc::new(rat_mod(a, b))))
         }
-        (BinaryOp::Pow, Value::Number(a), Value::Number(b)) => Ok(Value::Number(rat_pow(a, b)?)),
+        (BinaryOp::Pow, Value::Number(a), Value::Number(b)) => {
+            Ok(Value::Number(Rc::new(rat_pow(a, b)?)))
+        }
         (BinaryOp::Add, Value::String(a), Value::String(b)) => {
-            Ok(Value::String(format!("{}{}", a, b)))
+            Ok(Value::String(format!("{}{}", a, b).into()))
         }
         (BinaryOp::Eq, a, b) => Ok(Value::Bool(a == b)),
         (BinaryOp::Ne, a, b) => Ok(Value::Bool(a != b)),
@@ -438,10 +444,10 @@ fn eval_binary(op: BinaryOp, lhs: &Expr, rhs: &Expr, env: &Env) -> Result<Value>
         (BinaryOp::Gt, Value::String(a), Value::String(b)) => Ok(Value::Bool(a > b)),
         (BinaryOp::Ge, Value::String(a), Value::String(b)) => Ok(Value::Bool(a >= b)),
         (BinaryOp::Match, Value::String(a), Value::String(b)) => {
-            Ok(Value::Bool(a.contains(b.as_str())))
+            Ok(Value::Bool(a.contains(&**b)))
         }
         (BinaryOp::NotMatch, Value::String(a), Value::String(b)) => {
-            Ok(Value::Bool(!a.contains(b.as_str())))
+            Ok(Value::Bool(!a.contains(&**b)))
         }
         (op, a, b) => bail!(
             "cannot apply {:?} to {} and {}",
@@ -473,8 +479,8 @@ fn match_into(
             bindings.insert(name.clone(), val.clone());
             Ok(true)
         }
-        Pattern::Number(n) => Ok(matches!(val, Value::Number(m) if m == n)),
-        Pattern::String(s) => Ok(matches!(val, Value::String(t) if t == s)),
+        Pattern::Number(n) => Ok(matches!(val, Value::Number(m) if **m == *n)),
+        Pattern::String(s) => Ok(matches!(val, Value::String(t) if **t == **s)),
         Pattern::Bool(p) => Ok(matches!(val, Value::Bool(b) if b == p)),
         Pattern::List(items) => match_seq(items, val, env, bindings, true),
         Pattern::Tuple(items) => match_seq(items, val, env, bindings, false),
@@ -499,7 +505,7 @@ fn match_into(
                     let Value::String(name) = key else {
                         return Ok(false);
                     };
-                    let Some(found) = members.get(&name).cloned() else {
+                    let Some(found) = members.get(&*name).cloned() else {
                         return Ok(false);
                     };
                     if !match_into(sub_pat, &found, env, bindings)? {
@@ -536,8 +542,8 @@ fn match_into(
                 let Some(first) = s.chars().next() else {
                     return Ok(false);
                 };
-                let h = Value::String(first.to_string());
-                let t = Value::String(s[first.len_utf8()..].to_string());
+                let h = Value::String(first.to_string().into());
+                let t = Value::String(Rc::from(&s[first.len_utf8()..]));
                 if !match_into(head, &h, env, bindings)? {
                     return Ok(false);
                 }

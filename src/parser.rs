@@ -86,6 +86,21 @@ fn build_assignment(pair: Pair<Rule>) -> Result<Assignment> {
 
 fn build_pattern(pair: Pair<Rule>) -> Result<Pattern> {
     match pair.as_rule() {
+        Rule::pattern_cons => {
+            // `cons_op` is silent, so inner only yields the pattern atoms.
+            // Fold right so `a ++ b ++ rest` becomes Cons(a, Cons(b, rest)).
+            let atoms: Vec<Pattern> =
+                pair.into_inner().map(build_pattern).collect::<Result<_>>()?;
+            let mut iter = atoms.into_iter().rev();
+            let mut acc = iter.next().ok_or_else(|| anyhow!("empty pattern_cons"))?;
+            for head in iter {
+                acc = Pattern::Cons {
+                    head: Box::new(head),
+                    tail: Box::new(acc),
+                };
+            }
+            Ok(acc)
+        }
         Rule::wildcard => Ok(Pattern::Wildcard),
         Rule::ident => Ok(Pattern::Ident(pair.as_str().to_string())),
         Rule::number => Ok(Pattern::Number(parse_number(pair.as_str())?)),

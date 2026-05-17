@@ -83,6 +83,13 @@ pub enum Pattern {
     Tuple(Vec<PatternItem>),
     Dict(Vec<(Expr, Pattern)>),
     Set(Vec<Pattern>),
+    // `head ++ tail`. Type-polymorphic destructuring: splits off the first
+    // element of any value the `++` operator can build (list, string, tuple,
+    // set, dict). Right-associative — `a ++ b ++ rest` nests as `Cons(a, Cons(b, rest))`.
+    Cons {
+        head: Box<Pattern>,
+        tail: Box<Pattern>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

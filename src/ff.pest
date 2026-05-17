@@ -135,7 +135,7 @@ pattern_set        = { "{" ~ coll_sep? ~ pattern ~ (coll_sep ~ pattern)* ~ coll_
 // `wildcard` and `bool` precede `ident` so they aren't shadowed. `op_paren`
 // precedes `pattern_tuple` so `(++)` binds the operator name rather than
 // being attempted as a one-element tuple (which would fail anyway).
-pattern = _{
+pattern_atom = _{
       pattern_list
     | op_paren
     | pattern_tuple
@@ -147,6 +147,16 @@ pattern = _{
     | wildcard
     | ident
 }
+
+// `++` in pattern position. `!op_char` so `+++` keeps parsing as a single
+// custom-op token elsewhere; only the exact two-char `++` is the cons hook.
+cons_op = _{ "++" ~ !op_char }
+
+// `h ++ t` — type-polymorphic cons-pattern. Only wraps when there's at least
+// one `++`, so single-atom patterns flow through untouched. Right-associativity
+// is applied at build time, not in the grammar.
+pattern_cons = { pattern_atom ~ (cons_op ~ pattern_atom)+ }
+pattern = _{ pattern_cons | pattern_atom }
 
 // ----- Collections (expressions) -----
 list  = { "[" ~ coll_sep? ~ (expr ~ (coll_sep ~ expr)* ~ coll_sep?)? ~ "]" }

@@ -524,7 +524,60 @@ fn match_into(
             }
             Ok(true)
         }
+        // `head ++ tail` is the inverse of the `++` operator: peel off the
+        // first element (and rebuild the tail in the same shape) for any value
+        // type the operator can construct.
+        Pattern::Cons { head, tail } => match val {
+            Value::List(xs) => match_cons_seq(head, tail, xs, env, bindings, |t| {
+                Value::List(t)
+            }),
+            Value::Tuple(xs) => match_cons_seq(head, tail, xs, env, bindings, |t| {
+                Value::Tuple(t)
+            }),
+            Value::Set(xs) => {
+                match_cons_seq(head, tail, xs, env, bindings, |t| Value::Set(t))
+            }
+            Value::String(s) => {
+                let Some(first) = s.chars().next() else {
+                    return Ok(false);
+                };
+                let h = Value::String(first.to_string());
+                let t = Value::String(s[first.len_utf8()..].to_string());
+                if !match_into(head, &h, env, bindings)? {
+                    return Ok(false);
+                }
+                match_into(tail, &t, env, bindings)
+            }
+            Value::Dict(es) => {
+                let Some(((k, v), rest)) = es.split_first() else {
+                    return Ok(false);
+                };
+                let h = Value::Tuple(vec![k.clone(), v.clone()]);
+                if !match_into(head, &h, env, bindings)? {
+                    return Ok(false);
+                }
+                match_into(tail, &Value::Dict(rest.to_vec()), env, bindings)
+            }
+            _ => Ok(false),
+        },
     }
+}
+
+fn match_cons_seq(
+    head: &Pattern,
+    tail: &Pattern,
+    xs: &[Value],
+    env: &Env,
+    bindings: &mut HashMap<String, Value>,
+    rewrap: impl FnOnce(Vec<Value>) -> Value,
+) -> Result<bool> {
+    let Some((h, t)) = xs.split_first() else {
+        return Ok(false);
+    };
+    if !match_into(head, h, env, bindings)? {
+        return Ok(false);
+    }
+    match_into(tail, &rewrap(t.to_vec()), env, bindings)
 }
 
 fn match_seq(

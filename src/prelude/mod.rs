@@ -1,8 +1,10 @@
 use crate::interpreter::{Env, Scope, Value, ctx_of, define, eval_program};
 use crate::parser::parse;
 use anyhow::{Result, anyhow};
+use im::vector;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 mod global;
 mod io;
@@ -11,6 +13,22 @@ pub fn install(env: &Env) {
     for (name, f) in global::members() {
         define(env, name, f);
     }
+}
+
+pub(crate) fn ok(v: Value) -> Value {
+    Value::Tuple(vector![v, Value::Unit])
+}
+
+pub(crate) fn err(msg: impl Into<String>) -> Value {
+    Value::Tuple(vector![Value::Unit, Value::String(msg.into().into())])
+}
+
+pub(crate) fn dict(entries: Vec<(&str, Value)>) -> Value {
+    let entries = entries
+        .into_iter()
+        .map(|(name, value)| (Value::String(name.into()), value))
+        .collect();
+    Value::Dict(entries)
 }
 
 pub(crate) fn native_module(name: &str) -> Option<Value> {

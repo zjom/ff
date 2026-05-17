@@ -34,8 +34,9 @@ pub enum Value {
     },
 }
 
+pub type NativeFunction = Rc<dyn Fn(&Env, &[Value]) -> Result<Value>>;
 #[derive(Clone)]
-pub struct NativeFn(pub Rc<dyn Fn(&Env, &[Value]) -> Result<Value>>);
+pub struct NativeFn(pub NativeFunction);
 
 impl std::fmt::Debug for NativeFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

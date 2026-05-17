@@ -1,4 +1,4 @@
-use crate::interpreter::Value;
+use crate::interpreter::{Value, ctx_of};
 use crate::native;
 use std::io::Write;
 
@@ -6,18 +6,18 @@ pub fn members() -> Vec<(&'static str, Value)> {
     vec![
         (
             "println",
-            native!("io.println", 1, |ctx, args| {
+            native!("io.println", 1, |env, args| {
                 let s = render(&args[0]);
-                writeln!(ctx.out.borrow_mut(), "{}", s)
+                writeln!(ctx_of(env).out.borrow_mut(), "{}", s)
                     .map_err(|e| anyhow::anyhow!("io error: {}", e))?;
                 Ok(Value::Unit)
             }),
         ),
         (
             "print",
-            native!("io.print", 1, |ctx, args| {
+            native!("io.print", 1, |env, args| {
                 let s = render(&args[0]);
-                write!(ctx.out.borrow_mut(), "{}", s)
+                write!(ctx_of(env).out.borrow_mut(), "{}", s)
                     .map_err(|e| anyhow::anyhow!("io error: {}", e))?;
                 Ok(Value::Unit)
             }),

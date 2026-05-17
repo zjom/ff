@@ -34,7 +34,7 @@ pub enum Value {
 }
 
 #[derive(Clone)]
-pub struct NativeFn(pub Rc<dyn Fn(&Ctx, &[Value]) -> Result<Value>>);
+pub struct NativeFn(pub Rc<dyn Fn(&Env, &[Value]) -> Result<Value>>);
 
 impl std::fmt::Debug for NativeFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -92,7 +92,7 @@ impl Scope {
     }
 }
 
-fn ctx_of(env: &Env) -> Rc<Ctx> {
+pub fn ctx_of(env: &Env) -> Rc<Ctx> {
     env.borrow().ctx.clone()
 }
 
@@ -112,6 +112,64 @@ pub fn run(program: &Program) -> Result<Value> {
     let env = Scope::new();
     crate::prelude::install(&env);
     eval_program(program, &env)
+}
+
+// Apply a value (function or native) to a list of already-evaluated args.
+// Calls are unary after the parser's curry desugar, so `arg_vals` is either
+// empty (zero-arg call: `f()`) or a single value.
+pub fn apply(env: &Env, callee: Value, arg_vals: Vec<Value>) -> Result<Value> {
+    match callee {
+        Value::Function {
+            params,
+            body,
+            env: fn_env,
+        } => {
+            if params.len() != arg_vals.len() {
+                bail!(
+                    "function expects {} arg(s), got {}",
+                    params.len(),
+                    arg_vals.len()
+                );
+            }
+            let scope = Scope::child(fn_env);
+            for (p, a) in params.iter().zip(arg_vals) {
+                define(&scope, p, a);
+            }
+            eval_expr(&body, &scope)
+        }
+        Value::Native {
+            name,
+            arity,
+            mut applied,
+            f,
+        } => {
+            if arg_vals.is_empty() {
+                if arity == 0 && applied.is_empty() {
+                    return (f.0)(env, &[]);
+                }
+                bail!(
+                    "native `{}` expects {} arg(s), got {}",
+                    name,
+                    arity,
+                    applied.len()
+                );
+            }
+            applied.extend(arg_vals);
+            if applied.len() == arity {
+                (f.0)(env, &applied)
+            } else if applied.len() < arity {
+                Ok(Value::Native {
+                    name,
+                    arity,
+                    applied,
+                    f,
+                })
+            } else {
+                bail!("native `{}` over-applied (arity {})", name, arity)
+            }
+        }
+        v => bail!("cannot call non-function: {}", type_name(&v)),
+    }
 }
 
 pub fn eval_program(program: &Program, env: &Env) -> Result<Value> {
@@ -213,59 +271,7 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                 .iter()
                 .map(|a| eval_expr(a, env))
                 .collect::<Result<_>>()?;
-            match callee_val {
-                Value::Function {
-                    params,
-                    body,
-                    env: fn_env,
-                } => {
-                    if params.len() != arg_vals.len() {
-                        bail!(
-                            "function expects {} arg(s), got {}",
-                            params.len(),
-                            arg_vals.len()
-                        );
-                    }
-                    let scope = Scope::child(fn_env);
-                    for (p, a) in params.iter().zip(arg_vals) {
-                        define(&scope, p, a);
-                    }
-                    eval_expr(&body, &scope)
-                }
-                Value::Native {
-                    name,
-                    arity,
-                    mut applied,
-                    f,
-                } => {
-                    let ctx = ctx_of(env);
-                    if arg_vals.is_empty() {
-                        if arity == 0 && applied.is_empty() {
-                            return (f.0)(&ctx, &[]);
-                        }
-                        bail!(
-                            "native `{}` expects {} arg(s), got {}",
-                            name,
-                            arity,
-                            applied.len()
-                        );
-                    }
-                    applied.extend(arg_vals);
-                    if applied.len() == arity {
-                        (f.0)(&ctx, &applied)
-                    } else if applied.len() < arity {
-                        Ok(Value::Native {
-                            name,
-                            arity,
-                            applied,
-                            f,
-                        })
-                    } else {
-                        bail!("native `{}` over-applied (arity {})", name, arity)
-                    }
-                }
-                v => bail!("cannot call non-function: {}", type_name(&v)),
-            }
+            apply(env, callee_val, arg_vals)
         }
         Expr::Access { target, key } => {
             let t = eval_expr(target, env)?;

@@ -26,7 +26,38 @@ fn cons() -> Value {
                 ys.insert(0, v);
                 Ok(Value::List(ys))
             }
-            _ => bail!("can only cons to a list"),
+
+            (Value::String(mut left), Value::String(right)) => {
+                left.push_str(right.as_str());
+                Ok(Value::String(left))
+            }
+
+            (v, Value::Tuple(xs)) => {
+                let mut ys = xs;
+                ys.insert(0, v);
+                Ok(Value::Tuple(ys))
+            }
+
+            (v, Value::Set(xs)) => {
+                if xs.iter().any(|x| &v == x) {
+                    Ok(Value::Set(xs))
+                } else {
+                    let mut ys = xs;
+                    ys.push(v);
+                    Ok(Value::Set(ys))
+                }
+            }
+            (Value::Tuple(kvs), Value::Dict(mut xs)) => {
+                let (key, value) = (kvs[0].clone(), kvs[1].clone());
+                if kvs.len() == 2 {
+                    xs.retain(|(k, _)| k != &key);
+                    xs.push((key, value));
+                    Ok(Value::Dict(xs))
+                } else {
+                    bail!("unsupported operation: can only cons a length 2 tuple with a dict")
+                }
+            }
+            (left, right) => bail!("unsupported operation: cannot cons {} with {}", left, right),
         }
     })
 }

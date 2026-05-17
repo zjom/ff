@@ -41,6 +41,45 @@ impl Validator for REPLHelper {
     }
 }
 
+fn run_program(program: &Program, env: &Env) {
+    match eval_program(program, env) {
+        Ok(Value::Unit) => {}
+        Ok(v) => println!("{}", v),
+        Err(e) => eprintln!("error: {}", e),
+    }
+}
+
+// Scan past whitespace, newlines, comments, and string literals to find the
+// last syntactically meaningful character. Strings have no escape sequences
+// in this grammar, so `"..."` matching is sufficient.
+fn ends_with_continuation_comma(s: &str) -> bool {
+    let mut last: Option<char> = None;
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '#' => {
+                while let Some(&n) = chars.peek() {
+                    if n == '\n' || n == '\r' {
+                        break;
+                    }
+                    chars.next();
+                }
+            }
+            '"' => {
+                last = Some('"');
+                for c2 in chars.by_ref() {
+                    if c2 == '"' {
+                        break;
+                    }
+                }
+            }
+            c if c.is_whitespace() => {}
+            c => last = Some(c),
+        }
+    }
+    last == Some(',')
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, bon::Builder)]
 pub struct Config {
     #[builder(default = EditMode::Vi)]
@@ -145,43 +184,4 @@ impl TryFrom<Config> for Repl {
     fn try_from(value: Config) -> Result<Self, Self::Error> {
         Self::with_config(value)
     }
-}
-
-fn run_program(program: &Program, env: &Env) {
-    match eval_program(program, env) {
-        Ok(Value::Unit) => {}
-        Ok(v) => println!("{}", v),
-        Err(e) => eprintln!("error: {}", e),
-    }
-}
-
-// Scan past whitespace, newlines, comments, and string literals to find the
-// last syntactically meaningful character. Strings have no escape sequences
-// in this grammar, so `"..."` matching is sufficient.
-fn ends_with_continuation_comma(s: &str) -> bool {
-    let mut last: Option<char> = None;
-    let mut chars = s.chars().peekable();
-    while let Some(c) = chars.next() {
-        match c {
-            '#' => {
-                while let Some(&n) = chars.peek() {
-                    if n == '\n' || n == '\r' {
-                        break;
-                    }
-                    chars.next();
-                }
-            }
-            '"' => {
-                last = Some('"');
-                for c2 in chars.by_ref() {
-                    if c2 == '"' {
-                        break;
-                    }
-                }
-            }
-            c if c.is_whitespace() => {}
-            c => last = Some(c),
-        }
-    }
-    last == Some(',')
 }

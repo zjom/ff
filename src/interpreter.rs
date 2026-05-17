@@ -114,9 +114,9 @@ pub fn run(program: &Program) -> Result<Value> {
     eval_program(program, &env)
 }
 
-// Apply a value (function or native) to a list of already-evaluated args.
-// Calls are unary after the parser's curry desugar, so `arg_vals` is either
-// empty (zero-arg call: `f()`) or a single value.
+/// Apply a value (function or native) to a list of already-evaluated args.
+/// Calls are unary after the parser's curry desugar, so `arg_vals` is either
+/// empty (zero-arg call: `f()`) or a single value.
 pub fn apply(env: &Env, callee: Value, arg_vals: Vec<Value>) -> Result<Value> {
     match callee {
         Value::Function {

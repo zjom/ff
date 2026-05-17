@@ -47,6 +47,7 @@ impl std::fmt::Debug for NativeFn {
 pub struct Ctx {
     pub out: RefCell<Box<dyn Write>>,
     pub current_file: RefCell<Option<PathBuf>>,
+    pub current_exports: RefCell<Option<HashMap<String, Value>>>,
     pub is_interactive: bool,
 }
 
@@ -55,6 +56,7 @@ impl Ctx {
         Rc::new(Ctx {
             out: RefCell::new(Box::new(std::io::stdout())),
             current_file: RefCell::new(None),
+            current_exports: RefCell::new(None),
             is_interactive: true,
         })
     }
@@ -63,6 +65,7 @@ impl Ctx {
         Rc::new(Ctx {
             out: RefCell::new(Box::new(std::io::stdout())),
             current_file: RefCell::new(Some(path)),
+            current_exports: RefCell::new(None),
             is_interactive: false,
         })
     }
@@ -114,7 +117,7 @@ pub fn local_vars(env: &Env) -> HashMap<String, Value> {
     env.borrow().vars.clone()
 }
 
-fn lookup(env: &Env, name: &str) -> Option<Value> {
+pub fn lookup(env: &Env, name: &str) -> Option<Value> {
     if let Some(v) = env.borrow().vars.get(name).cloned() {
         return Some(v);
     }

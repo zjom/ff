@@ -1,14 +1,16 @@
-use crate::interpreter::{Scope, Value, apply, ctx_of, eval_program, local_vars, type_name};
+use crate::interpreter::{Scope, Value, apply, ctx_of, eval_program, lookup, type_name};
 use crate::native;
 use crate::parser::parse;
 use crate::prelude::native_module;
-use anyhow::bail;
+use anyhow::{anyhow, bail};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub fn members() -> Vec<(&'static str, Value)> {
     vec![
         ("|>", pipe()),
         ("import", import()),
+        ("export", export()),
         ("print", print()),
         ("println", println()),
     ]
@@ -69,13 +71,39 @@ fn import() -> Value {
             .unwrap_or("module")
             .to_string();
         let module_env = Scope::child(env.clone());
-        let prev = ctx.current_file.replace(Some(resolved));
+        let prev_file = ctx.current_file.replace(Some(resolved));
+        let prev_exports = ctx.current_exports.replace(Some(HashMap::new()));
         let result = eval_program(&program, &module_env);
-        *ctx.current_file.borrow_mut() = prev;
+        let exports = ctx.current_exports.replace(prev_exports);
+        *ctx.current_file.borrow_mut() = prev_file;
         result?;
         Ok(Value::Module {
             name,
-            members: local_vars(&module_env),
+            members: exports.unwrap_or_default(),
         })
+    })
+}
+
+fn export() -> Value {
+    native!("export", 1, |env, args| {
+        let name = match &args[0] {
+            Value::String(s) => s.clone(),
+            v => bail!("export expects string, got {}", type_name(v)),
+        };
+        let val = lookup(env, &name)
+            .ok_or_else(|| anyhow!("export: undefined variable `{}`", name))?;
+        let ctx = ctx_of(env);
+        {
+            let mut exports = ctx.current_exports.borrow_mut();
+            match exports.as_mut() {
+                Some(table) => {
+                    table.insert(name, val);
+                }
+                None => bail!("export can only be called from an imported module"),
+            }
+        }
+        // Return self so curried multi-arg calls chain:
+        // `export("a", "b")` desugars to `export("a")("b")`.
+        Ok(export())
     })
 }

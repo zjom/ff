@@ -25,7 +25,8 @@ lazy_static! {
             | Op::infix(Rule::ge, Assoc::Left)
             | Op::infix(Rule::match_op, Assoc::Left)
             | Op::infix(Rule::not_match, Assoc::Left))
-        .op(Op::infix(Rule::custom_op_cat, Assoc::Right))
+        .op(Op::infix(Rule::custom_op_cat, Assoc::Right)
+            | Op::infix(Rule::cons_op, Assoc::Right))
         .op(Op::infix(Rule::add, Assoc::Left)
             | Op::infix(Rule::subtract, Assoc::Left)
             | Op::infix(Rule::custom_op_add, Assoc::Left))
@@ -87,10 +88,14 @@ fn build_assignment(pair: Pair<Rule>) -> Result<Assignment> {
 fn build_pattern(pair: Pair<Rule>) -> Result<Pattern> {
     match pair.as_rule() {
         Rule::pattern_cons => {
-            // `cons_op` is silent, so inner only yields the pattern atoms.
-            // Fold right so `a ++ b ++ rest` becomes Cons(a, Cons(b, rest)).
-            let atoms: Vec<Pattern> =
-                pair.into_inner().map(build_pattern).collect::<Result<_>>()?;
+            // `cons_op` is non-silent (the Pratt parser needs to see it in
+            // expression position); strip it here so we only fold the atoms.
+            // Right-assoc: `a :: b :: rest` becomes Cons(a, Cons(b, rest)).
+            let atoms: Vec<Pattern> = pair
+                .into_inner()
+                .filter(|p| p.as_rule() != Rule::cons_op)
+                .map(build_pattern)
+                .collect::<Result<_>>()?;
             let mut iter = atoms.into_iter().rev();
             let mut acc = iter.next().ok_or_else(|| anyhow!("empty pattern_cons"))?;
             for head in iter {
@@ -245,7 +250,8 @@ fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
                 | Rule::custom_op_cat
                 | Rule::custom_op_comp
                 | Rule::custom_op_and
-                | Rule::custom_op_or => {
+                | Rule::custom_op_or
+                | Rule::cons_op => {
                     // Curried call: `a OP b` desugars to `(OP)(a)(b)`.
                     let name = Expr::Ident(op.as_str().to_string());
                     return Ok(Expr::Call {

@@ -6,7 +6,7 @@ use crate::native;
 pub fn members() -> Vec<(&'static str, Value)> {
     vec![
         ("|>", pipe()),
-        ("++", cons()),
+        ("::", cons()),
         ("print", print()),
         ("println", println()),
     ]
@@ -19,7 +19,7 @@ fn pipe() -> Value {
 }
 
 fn cons() -> Value {
-    native!("++", 2, |_env, args| {
+    native!("::", 2, |_env, args| {
         match (args[0].clone(), args[1].clone()) {
             (v, Value::List(xs)) => {
                 let mut ys = xs;

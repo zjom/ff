@@ -3,6 +3,9 @@ WHITESPACE = _{ " " | "\t" }
 COMMENT    = _{ "#" ~ (!NEWLINE ~ ANY)* }
 NEWLINE    = _{ "\r\n" | "\n" | "\r" }
 
+// Statement separator: newline or `;` (both interchangeable, repeatable).
+stmt_sep = _{ (NEWLINE | ";")+ }
+
 // ----- Keywords (excluded from idents) -----
 keyword = @{
     ("if" | "then" | "else" | "match" | "true" | "false")
@@ -150,11 +153,11 @@ set        = { "{" ~ expr ~ ("," ~ expr)* ~ ","? ~ "}" }
 // captures the enclosing lexical scope; new bindings are local to the block.
 // The block's value is the value of the last statement (Unit if that statement
 // is an assignment). To disambiguate from tuple / parenthesized-expression, a
-// scope must contain either a single assignment or two-plus newline-separated
-// statements. `(x)` remains a parenthesized expression; `(x = 1)` is a scope.
+// scope must contain either a single assignment or two-plus statements separated
+// by `;` or newline. `(x)` remains a parenthesized expression; `(x = 1)` is a scope.
 scope = {
-      "(" ~ NEWLINE* ~ statement ~ (NEWLINE+ ~ statement)+ ~ NEWLINE* ~ ")"
-    | "(" ~ NEWLINE* ~ assignment ~ NEWLINE* ~ ")"
+      "(" ~ stmt_sep? ~ statement ~ (stmt_sep ~ statement)+ ~ stmt_sep? ~ ")"
+    | "(" ~ stmt_sep? ~ assignment ~ stmt_sep? ~ ")"
 }
 
 // ----- Function literal -----
@@ -222,8 +225,8 @@ statement  = _{ assignment | expr }
 
 program = {
     SOI
-    ~ NEWLINE*
-    ~ (statement ~ (NEWLINE+ ~ statement)*)?
-    ~ NEWLINE*
+    ~ stmt_sep?
+    ~ (statement ~ (stmt_sep ~ statement)*)?
+    ~ stmt_sep?
     ~ EOI
 }

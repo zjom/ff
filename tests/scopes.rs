@@ -175,3 +175,38 @@ fn scope_unterminated_is_parse_error() {
     let msg = parse_err("(\n  x = 1\n");
     assert!(!msg.is_empty());
 }
+
+#[test]
+fn semicolon_separates_program_statements() {
+    assert_eq!(eval("1; 2; 3"), "3");
+}
+
+#[test]
+fn semicolon_mixed_with_newline_in_program() {
+    assert_eq!(eval("x = 1; y = 2\nx + y"), "3");
+}
+
+#[test]
+fn trailing_semicolon_in_program() {
+    assert_eq!(eval("1; 2;"), "2");
+}
+
+#[test]
+fn leading_semicolon_in_program() {
+    assert_eq!(eval(";1"), "1");
+}
+
+#[test]
+fn repeated_semicolons_in_program() {
+    assert_eq!(eval("1;;; 2"), "2");
+}
+
+#[test]
+fn semicolon_separates_scope_statements() {
+    assert_eq!(eval("(a = 1; b = 2; a + b)"), "3");
+}
+
+#[test]
+fn semicolon_mixed_with_newline_in_scope() {
+    assert_eq!(eval("(a = 1; b = 2\n  a + b)"), "3");
+}

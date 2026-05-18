@@ -172,6 +172,58 @@ fn cons_pattern_literal_head() {
     assert_eq!(eval(src2), "[99]");
 }
 
+// --- guard clauses ----------------------------------------------------------
+
+#[test]
+fn match_guard_picks_first_truthy_arm() {
+    let src = "match 1\n  n if n < 2 -> \"lt 2\",\n  n -> \"ge 2\"";
+    assert_eq!(eval(src), "\"lt 2\"");
+}
+
+#[test]
+fn match_guard_falls_through_when_false() {
+    let src = "match 5\n  n if n < 2 -> \"lt 2\",\n  n -> \"ge 2\"";
+    assert_eq!(eval(src), "\"ge 2\"");
+}
+
+#[test]
+fn match_guard_can_reference_bound_idents() {
+    // Guard sees bindings produced by the pattern.
+    let src = "match [1, 2, 3]\n  [x, y, ..] if x < y -> \"ascending\",\n  _ -> \"other\"";
+    assert_eq!(eval(src), "\"ascending\"");
+}
+
+#[test]
+fn match_guard_multiple_arms_same_pattern() {
+    // Same `n` pattern, different guards — first truthy wins.
+    let src = "f = match\n  n if n < 0 -> \"neg\",\n  n if n == 0 -> \"zero\",\n  n -> \"pos\"\nf(-3)";
+    assert_eq!(eval(src), "\"neg\"");
+    let src = "f = match\n  n if n < 0 -> \"neg\",\n  n if n == 0 -> \"zero\",\n  n -> \"pos\"\nf 0";
+    assert_eq!(eval(src), "\"zero\"");
+    let src = "f = match\n  n if n < 0 -> \"neg\",\n  n if n == 0 -> \"zero\",\n  n -> \"pos\"\nf 7";
+    assert_eq!(eval(src), "\"pos\"");
+}
+
+#[test]
+fn match_guard_failure_with_no_fallback_is_runtime_error() {
+    let src = "match 5\n  n if n < 2 -> \"lt 2\"";
+    let prog = ff::parser::parse(src).expect("parse");
+    assert!(ff::interpreter::run(&prog).is_err());
+}
+
+#[test]
+fn match_guard_non_bool_is_runtime_error() {
+    let src = "match 1\n  n if 42 -> \"yes\"";
+    let prog = ff::parser::parse(src).expect("parse");
+    assert!(ff::interpreter::run(&prog).is_err());
+}
+
+#[test]
+fn match_guard_can_use_outer_bindings() {
+    let src = "lo = 10\nmatch 5\n  n if n < lo -> \"small\",\n  _ -> \"big\"";
+    assert_eq!(eval(src), "\"small\"");
+}
+
 // --- match-as-function ------------------------------------------------------
 
 #[test]

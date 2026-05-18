@@ -314,6 +314,13 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                     for (k, v) in bindings {
                         define(&scope, &k, v);
                     }
+                    if let Some(guard) = &arm.guard {
+                        match eval_expr(guard, &scope)? {
+                            Value::Bool(true) => {}
+                            Value::Bool(false) => continue,
+                            v => bail!("match guard must be bool, got {}", type_name(&v)),
+                        }
+                    }
                     return eval_expr(&arm.body, &scope);
                 }
             }

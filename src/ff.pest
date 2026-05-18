@@ -204,7 +204,10 @@ if_expr = { "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr }
 // allowed so arms can be laid out across multiple lines. The scrutinee is
 // optional: a match without one evaluates to a 1-arg function whose
 // argument becomes the scrutinee.
-match_arm  = { pattern ~ "->" ~ expr }
+// An optional `if <expr>` guard runs after the pattern binds; arms whose
+// guard is false fall through to the next arm.
+match_guard = { "if" ~ expr }
+match_arm  = { pattern ~ match_guard? ~ "->" ~ expr }
 match_expr = {
     "match" ~ expr?
     ~ NEWLINE+

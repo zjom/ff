@@ -121,6 +121,17 @@ match value
   n          -> n * 100   # bare ident binds
 ```
 
+An arm can carry an `if` guard that runs after the pattern binds; a false
+guard falls through to the next arm:
+
+```
+match n
+  n if n < 0  -> "neg",
+  0           -> "zero",
+  n if n < 10 -> "small",
+  _           -> "big"
+```
+
 If the scrutinee is omitted, the `match` evaluates to a one-argument function
 whose argument becomes the scrutinee — useful for assigning a matcher to a
 name:

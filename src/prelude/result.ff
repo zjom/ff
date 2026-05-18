@@ -1,0 +1,7 @@
+Ok = val => (val, ())
+Err = err => ((), err)
+
+map = (f, xs) => match xs
+  x :: rest -> f(x)
+
+export Ok, Err, map

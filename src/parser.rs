@@ -356,8 +356,16 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
                 .map(|arm| {
                     let mut p = arm.into_inner();
                     let pattern = build_pattern(p.next().unwrap())?;
-                    let body = build_expr(p.next().unwrap())?;
-                    Ok(MatchArm { pattern, body })
+                    let mut next = p.next().unwrap();
+                    let guard = if next.as_rule() == Rule::match_guard {
+                        let g = build_expr(next.into_inner().next().unwrap())?;
+                        next = p.next().unwrap();
+                        Some(g)
+                    } else {
+                        None
+                    };
+                    let body = build_expr(next)?;
+                    Ok(MatchArm { pattern, guard, body })
                 })
                 .collect::<Result<Vec<_>>>()?;
             match scrutinee_expr {

@@ -10,8 +10,13 @@ pub fn members() -> Vec<(&'static str, Value)> {
         ("::", cons()),
         ("print", print()),
         ("println", println()),
+        ("panic", panic()),
         ("default", default()),
     ]
+}
+
+pub fn panic() -> Value {
+    native!("panic", 1, |_env, args| { bail!("panic: {}", args[0]) })
 }
 
 fn cons() -> Value {

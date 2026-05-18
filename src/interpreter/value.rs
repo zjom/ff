@@ -145,13 +145,26 @@ impl core::cmp::PartialEq for Value {
 }
 
 /// Force a Cons spine into a flat Vec of its elements. Returns None if a thunk
-/// fails to evaluate, or if the terminator is something other than an empty
-/// list/tuple/set/range/unit (i.e. has no obvious "rest" to splice in). Walks
-/// finite ranges in the terminator and inlines list/tuple/set tails.
+/// fails to evaluate, or if the terminator type has no natural sequence
+/// (number, bool, function, etc.). Strings flatten to one-char string values,
+/// dicts to `(k, v)` tuples, ranges to numbers, so cross-type equality like
+/// `take(3, "hel") == "hel"` and `cons-built-dict == literal-dict` works.
 fn flatten_cons(v: &Value) -> Option<Vec<Value>> {
     let (mut items, mut cur_tail) = match v {
         Value::Cons { head, tail } => (vec![(**head).clone()], tail.clone()),
-        Value::List(xs) | Value::Tuple(xs) | Value::Set(xs) => return Some(xs.iter().cloned().collect()),
+        Value::List(xs) | Value::Tuple(xs) | Value::Set(xs) => {
+            return Some(xs.iter().cloned().collect());
+        }
+        Value::String(s) => return Some(string_chars(s)),
+        Value::Dict(es) => return Some(es.iter().map(|(k, v)| pair(k, v)).collect()),
+        Value::Range {
+            start,
+            end,
+            inclusive,
+        } => {
+            let e = end.as_deref()?;
+            return Some(range_elems(start, e, *inclusive));
+        }
         _ => return None,
     };
     loop {
@@ -165,23 +178,47 @@ fn flatten_cons(v: &Value) -> Option<Vec<Value>> {
                 items.extend(xs.iter().cloned());
                 return Some(items);
             }
+            Value::String(s) => {
+                items.extend(string_chars(&s));
+                return Some(items);
+            }
+            Value::Dict(es) => {
+                items.extend(es.iter().map(|(k, v)| pair(k, v)));
+                return Some(items);
+            }
             Value::Range {
                 start,
                 end,
                 inclusive,
             } => {
                 let end = end?; // refuse to flatten infinite tails
-                let mut cur: Rational = (*start).clone();
-                while super::number::range_has_elem(&cur, Some(&end), inclusive) {
-                    items.push(Value::Number(Rc::new(cur.clone())));
-                    cur += 1;
-                }
+                items.extend(range_elems(&start, &end, inclusive));
                 return Some(items);
             }
             Value::Unit => return Some(items),
             _ => return None,
         }
     }
+}
+
+fn string_chars(s: &str) -> Vec<Value> {
+    s.chars()
+        .map(|c| Value::String(c.to_string().into()))
+        .collect()
+}
+
+fn pair(k: &Value, v: &Value) -> Value {
+    Value::Tuple(im::vector![k.clone(), v.clone()])
+}
+
+fn range_elems(start: &Rational, end: &Rational, inclusive: bool) -> Vec<Value> {
+    let mut out = Vec::new();
+    let mut cur: Rational = start.clone();
+    while super::number::range_has_elem(&cur, Some(end), inclusive) {
+        out.push(Value::Number(Rc::new(cur.clone())));
+        cur += 1;
+    }
+    out
 }
 
 impl std::fmt::Display for Value {
@@ -256,12 +293,12 @@ impl std::fmt::Display for Value {
     }
 }
 
-/// Walk a Cons spine, forcing thunks as we go, and print as a list literal
-/// suffixed by whatever terminator the spine settles on. Empty list / empty
-/// range terminators are elided; a non-empty range is rendered inline so e.g.
-/// `1 :: [3..5]` prints as `[1, 3, 4]`. Infinite ranges show their open-end
-/// marker (`[1, 0..]`) without forcing them. Forcing errors surface as
-/// `<error: ...>` rather than panicking out of Display.
+/// Walk a Cons spine, forcing thunks as we go, then print in the shape of the
+/// terminator. A spine ending in a tuple prints with `(...)`, in a set with
+/// `{...}`, a dict with `{k: v, ...}`, a string with `"..."`, etc. — this is
+/// what makes `take(3, "hello")` display as `"hel"` and `take(2, {"a":1,"b":2})`
+/// as `{"a": 1, "b": 2}`. Infinite ranges show their open-end marker without
+/// forcing further; forcing errors surface as `<error: ...>`.
 fn fmt_cons(
     f: &mut std::fmt::Formatter<'_>,
     head: &Rc<Value>,
@@ -282,17 +319,104 @@ fn fmt_cons(
             other => break other,
         }
     };
+
+    match &terminator {
+        Value::Tuple(xs) => {
+            write!(f, "(")?;
+            let total = items.len() + xs.len();
+            let mut first = true;
+            for x in items.iter().chain(xs.iter()) {
+                if !first {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{}", x)?;
+                first = false;
+            }
+            if total == 1 {
+                write!(f, ",")?;
+            }
+            write!(f, ")")
+        }
+        Value::Set(xs) => {
+            write!(f, "{{")?;
+            let mut first = true;
+            for x in items.iter().chain(xs.iter()) {
+                if !first {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{}", x)?;
+                first = false;
+            }
+            write!(f, "}}")
+        }
+        Value::Dict(es) => {
+            write!(f, "{{")?;
+            let mut first = true;
+            for x in &items {
+                let Some((k, v)) = pair_of(x) else {
+                    return write!(f, "<bad dict cons cell: {}>", x);
+                };
+                if !first {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{}: {}", k, v)?;
+                first = false;
+            }
+            for (k, v) in es {
+                if !first {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{}: {}", k, v)?;
+                first = false;
+            }
+            write!(f, "}}")
+        }
+        Value::String(s) => {
+            // String cons builds chars/substrings: write the concatenation
+            // back out as a single string literal.
+            let mut buf = String::new();
+            for x in &items {
+                let Value::String(t) = x else {
+                    // Non-string head with a string terminator: fall back to
+                    // the list-style display rather than producing nonsense.
+                    return fmt_cons_listish(f, &items, &terminator);
+                };
+                buf.push_str(t);
+            }
+            buf.push_str(s);
+            write!(f, "{:?}", buf)
+        }
+        _ => fmt_cons_listish(f, &items, &terminator),
+    }
+}
+
+fn pair_of(v: &Value) -> Option<(&Value, &Value)> {
+    let xs = match v {
+        Value::Tuple(xs) | Value::List(xs) => xs,
+        _ => return None,
+    };
+    if xs.len() != 2 {
+        return None;
+    }
+    Some((xs.get(0).unwrap(), xs.get(1).unwrap()))
+}
+
+fn fmt_cons_listish(
+    f: &mut std::fmt::Formatter<'_>,
+    items: &[Value],
+    terminator: &Value,
+) -> std::fmt::Result {
     write!(f, "[")?;
     let mut wrote_any = false;
-    for x in &items {
+    for x in items {
         if wrote_any {
             write!(f, ", ")?;
         }
         write!(f, "{}", x)?;
         wrote_any = true;
     }
-    match &terminator {
-        Value::List(xs) | Value::Tuple(xs) | Value::Set(xs) => {
+    match terminator {
+        Value::List(xs) => {
             for x in xs {
                 if wrote_any {
                     write!(f, ", ")?;

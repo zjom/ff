@@ -1,0 +1,300 @@
+use anyhow::{Result, anyhow, bail};
+use im::Vector;
+use rug::Rational;
+use std::rc::Rc;
+
+use crate::ast::{AccessKey, ExportKind, Expr, Program, Statement, UnaryOp};
+
+use super::binop::eval_binary;
+use super::pattern::match_pattern;
+use super::scope::{Env, Scope, ctx_of, define, lookup};
+use super::value::{Value, type_name};
+
+pub fn run(program: &Program) -> Result<Value> {
+    let env = Scope::new();
+    crate::prelude::install(&env);
+    eval_program(program, &env)
+}
+
+/// Apply a value (function or native) to a list of already-evaluated args.
+/// Calls are unary after the parser's curry desugar, so `arg_vals` is either
+/// empty (zero-arg call: `f()`) or a single value.
+pub fn apply(env: &Env, callee: Value, arg_vals: Vec<Value>) -> Result<Value> {
+    match callee {
+        Value::Function {
+            params,
+            body,
+            env: fn_env,
+        } => {
+            if params.len() != arg_vals.len() {
+                bail!(
+                    "function expects {} arg(s), got {}",
+                    params.len(),
+                    arg_vals.len()
+                );
+            }
+            let scope = Scope::child(fn_env);
+            for (p, a) in params.iter().zip(arg_vals) {
+                define(&scope, p, a);
+            }
+            eval_expr(&body, &scope)
+        }
+        Value::Native {
+            name,
+            arity,
+            mut applied,
+            f,
+        } => {
+            if arg_vals.is_empty() {
+                if arity == 0 && applied.is_empty() {
+                    return (f.0)(env, &[]);
+                }
+                bail!(
+                    "native `{}` expects {} arg(s), got {}",
+                    name,
+                    arity,
+                    applied.len()
+                );
+            }
+            applied.extend(arg_vals);
+            if applied.len() == arity {
+                (f.0)(env, &applied)
+            } else if applied.len() < arity {
+                Ok(Value::Native {
+                    name,
+                    arity,
+                    applied,
+                    f,
+                })
+            } else {
+                bail!("native `{}` over-applied (arity {})", name, arity)
+            }
+        }
+        v => bail!("cannot call non-function: {}", type_name(&v)),
+    }
+}
+
+pub fn eval_program(program: &Program, env: &Env) -> Result<Value> {
+    let mut last = Value::Unit;
+    for stmt in &program.statements {
+        last = eval_statement(stmt, env)?;
+    }
+    Ok(last)
+}
+
+fn eval_statement(stmt: &Statement, env: &Env) -> Result<Value> {
+    match stmt {
+        Statement::Assignment(a) => {
+            let val = eval_expr(&a.value, env)?;
+            let bindings = match_pattern(&a.pattern, &val, env)?
+                .ok_or_else(|| anyhow!("pattern match failed in assignment"))?;
+            for (k, v) in bindings {
+                define(env, &k, v);
+            }
+            Ok(Value::Unit)
+        }
+        Statement::Export(kind) => {
+            let ctx = ctx_of(env);
+            let mut exports_slot = ctx.current_exports.borrow_mut();
+            // Top-level scripts have no exports table; `export` is a no-op
+            // there so a module file can still be run directly.
+            let Some(table) = exports_slot.as_mut() else {
+                return Ok(Value::Unit);
+            };
+            match kind {
+                ExportKind::All => {
+                    for (k, v) in env.borrow().vars.iter() {
+                        table.insert(k.clone(), v.clone());
+                    }
+                }
+                ExportKind::Names(names) => {
+                    for name in names {
+                        let v = lookup(env, name)
+                            .ok_or_else(|| anyhow!("export: undefined variable `{}`", name))?;
+                        table.insert(name.clone(), v);
+                    }
+                }
+            }
+            Ok(Value::Unit)
+        }
+        // Bare `import "x"` statement splats the module's exports into the
+        // current scope. An `import` used as part of a larger expression
+        // (`x = import "x"`, `foo(import "x")`) just produces a Module value.
+        Statement::Expr(Expr::Import(path)) => {
+            let val = eval_expr(&Expr::Import(path.clone()), env)?;
+            if let Value::Module { members, .. } = val {
+                for (k, v) in members {
+                    define(env, &k, v);
+                }
+            }
+            Ok(Value::Unit)
+        }
+        Statement::Expr(e) => eval_expr(e, env),
+    }
+}
+
+pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
+    match expr {
+        Expr::Number(n) => Ok(Value::Number(Rc::new(n.clone()))),
+        Expr::String(s) => Ok(Value::String(s.as_str().into())),
+        Expr::Bool(b) => Ok(Value::Bool(*b)),
+        Expr::Ident(name) => {
+            lookup(env, name).ok_or_else(|| anyhow!("undefined variable: {}", name))
+        }
+        Expr::List(items) => Ok(Value::List(
+            items
+                .iter()
+                .map(|e| eval_expr(e, env))
+                .collect::<Result<_>>()?,
+        )),
+        Expr::Tuple(items) => Ok(Value::Tuple(
+            items
+                .iter()
+                .map(|e| eval_expr(e, env))
+                .collect::<Result<_>>()?,
+        )),
+        Expr::Dict(entries) => {
+            let mut out: Vector<(Value, Value)> = Vector::new();
+            for (k, v) in entries {
+                let kv = eval_expr(k, env)?;
+                let vv = eval_expr(v, env)?;
+                if let Some(idx) = out.iter().position(|(ek, _)| ek == &kv) {
+                    out.set(idx, (kv, vv));
+                } else {
+                    out.push_back((kv, vv));
+                }
+            }
+            Ok(Value::Dict(out))
+        }
+        Expr::Set(items) => {
+            let mut out: Vector<Value> = Vector::new();
+            for e in items {
+                let v = eval_expr(e, env)?;
+                if !out.iter().any(|x| x == &v) {
+                    out.push_back(v);
+                }
+            }
+            Ok(Value::Set(out))
+        }
+        Expr::Function { params, body } => Ok(Value::Function {
+            params: params.clone(),
+            body: (**body).clone(),
+            env: env.clone(),
+        }),
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => match eval_expr(cond, env)? {
+            Value::Bool(true) => eval_expr(then_branch, env),
+            Value::Bool(false) => eval_expr(else_branch, env),
+            v => bail!("if condition must be bool, got {}", type_name(&v)),
+        },
+        Expr::Match { scrutinee, arms } => {
+            let val = eval_expr(scrutinee, env)?;
+            for arm in arms {
+                if let Some(bindings) = match_pattern(&arm.pattern, &val, env)? {
+                    let scope = Scope::child(env.clone());
+                    for (k, v) in bindings {
+                        define(&scope, &k, v);
+                    }
+                    if let Some(guard) = &arm.guard {
+                        match eval_expr(guard, &scope)? {
+                            Value::Bool(true) => {}
+                            Value::Bool(false) => continue,
+                            v => bail!("match guard must be bool, got {}", type_name(&v)),
+                        }
+                    }
+                    return eval_expr(&arm.body, &scope);
+                }
+            }
+            bail!("no match arm matched")
+        }
+        Expr::Call { callee, args } => {
+            let callee_val = eval_expr(callee, env)?;
+            let arg_vals: Vec<Value> = args
+                .iter()
+                .map(|a| eval_expr(a, env))
+                .collect::<Result<_>>()?;
+            apply(env, callee_val, arg_vals)
+        }
+        Expr::Range {
+            start,
+            end,
+            inclusive,
+        } => {
+            let start_v = eval_expr(start, env)?;
+            let Value::Number(s) = start_v else {
+                bail!("range start must be a number, got {}", type_name(&start_v));
+            };
+            let end_v = match end {
+                None => None,
+                Some(e) => {
+                    let v = eval_expr(e, env)?;
+                    let Value::Number(n) = v else {
+                        bail!("range end must be a number, got {}", type_name(&v));
+                    };
+                    Some(n)
+                }
+            };
+            Ok(Value::Range {
+                start: s,
+                end: end_v,
+                inclusive: *inclusive,
+            })
+        }
+        Expr::Import(path) => {
+            let v = eval_expr(path, env)?;
+            let Value::String(s) = v else {
+                bail!("import expects string path, got {}", type_name(&v));
+            };
+            crate::prelude::import_module(env, &s)
+        }
+        Expr::Access { target, key } => {
+            let t = eval_expr(target, env)?;
+            match (&t, key) {
+                (Value::List(xs), AccessKey::Index(i))
+                | (Value::Tuple(xs), AccessKey::Index(i)) => xs
+                    .get(*i)
+                    .cloned()
+                    .ok_or_else(|| anyhow!("index {} out of range (len {})", i, xs.len())),
+                (Value::Dict(es), AccessKey::Field(name)) => {
+                    let k = Value::String(name.as_str().into());
+                    es.iter()
+                        .find(|(ek, _)| ek == &k)
+                        .map(|(_, v)| v.clone())
+                        .ok_or_else(|| anyhow!("dict has no key {:?}", name))
+                }
+                (Value::Module { members, .. }, AccessKey::Field(name)) => members
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| anyhow!("module has no member `.{}`", name)),
+                (v, AccessKey::Index(_)) => {
+                    bail!("cannot index into {}", type_name(v))
+                }
+                (v, AccessKey::Field(name)) => {
+                    bail!("cannot read field .{} from {}", name, type_name(v))
+                }
+            }
+        }
+        Expr::Unary { op, operand } => {
+            let v = eval_expr(operand, env)?;
+            match (op, v) {
+                (UnaryOp::Neg, Value::Number(n)) => {
+                    Ok(Value::Number(Rc::new(Rational::from(-n.as_ref()))))
+                }
+                (UnaryOp::Not, Value::Bool(b)) => Ok(Value::Bool(!b)),
+                (op, v) => bail!("cannot apply {:?} to {}", op, type_name(&v)),
+            }
+        }
+        Expr::Binary { op, lhs, rhs } => eval_binary(*op, lhs, rhs, env),
+        Expr::Scope(stmts) => {
+            let scope = Scope::child(env.clone());
+            let mut last = Value::Unit;
+            for stmt in stmts {
+                last = eval_statement(stmt, &scope)?;
+            }
+            Ok(last)
+        }
+    }
+}

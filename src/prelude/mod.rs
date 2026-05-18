@@ -26,11 +26,14 @@ pub fn install(env: &Env) {
 }
 
 pub(crate) fn ok(v: Value) -> Value {
-    Value::Tuple(vector![v, Value::Unit])
+    Value::Tuple(vector![Value::Atom(":ok".into()), v])
 }
 
 pub(crate) fn err(msg: impl Into<String>) -> Value {
-    Value::Tuple(vector![Value::Unit, Value::String(msg.into().into())])
+    Value::Tuple(vector![
+        Value::Atom(":error".into()),
+        Value::String(msg.into().into())
+    ])
 }
 
 pub(crate) fn dict(entries: Vec<(&str, Value)>) -> Value {

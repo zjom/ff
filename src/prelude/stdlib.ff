@@ -1,18 +1,7 @@
 (|>) = left, right => right(left)
 
-Ok = val => (val, ())
-Err = err => ((), err)
-
-Some = val => (val,)
-None = ((),)
-
 map = (f, xs) => match xs
   x :: rest -> f(x) :: map(f, rest),
-  none -> none
-
-fmap = (f, xs) => match xs
-  () :: rest -> () :: fmap(f, rest),
-  x :: rest -> f(x) :: fmap(f, rest),
   none -> none
 
 filter = (f,xs) => match xs
@@ -38,4 +27,4 @@ fold = (f, acc, xs) => match xs
 
 assert = val => if val != default(val) then val else panic "assert failed"
 
-export (|>), Some, None, Ok, Err, map, filter, fmap, take, rev, reduce, fold, assert
+export (|>), map, filter, take, rev, reduce, fold, assert

@@ -1,23 +1,17 @@
-use anyhow::{Result, bail};
-use im::{Vector, vector};
+use anyhow::bail;
+use im::Vector;
+use rug::Rational;
 
-use crate::interpreter::{Env, Value, apply, ctx_of, type_name};
+use crate::interpreter::{Value, ctx_of, type_name};
 use crate::native;
 
 pub fn members() -> Vec<(&'static str, Value)> {
     vec![
-        ("|>", pipe()),
         ("::", cons()),
-        ("filter", filter()),
         ("print", print()),
         ("println", println()),
+        ("default", default()),
     ]
-}
-
-fn pipe() -> Value {
-    native!("|>", 2, |env, args| {
-        apply(env, args[1].clone(), vec![args[0].clone()])
-    })
 }
 
 fn cons() -> Value {
@@ -63,52 +57,32 @@ fn cons() -> Value {
     })
 }
 
-fn filter() -> Value {
-    native!("filter", 2, |env, args| {
-        let f = args[0].clone();
-        match args[1].clone() {
-            Value::List(xs) => Ok(Value::List(keep_each(env, &f, xs)?)),
-            Value::Tuple(xs) => Ok(Value::Tuple(keep_each(env, &f, xs)?)),
-            Value::Set(xs) => Ok(Value::Set(keep_each(env, &f, xs)?)),
-            Value::Dict(es) => {
-                let mut out = Vector::new();
-                for (k, v) in es {
-                    let pair = Value::Tuple(vector![k.clone(), v.clone()]);
-                    if keep(env, &f, pair)? {
-                        out.push_back((k, v));
-                    }
-                }
-                Ok(Value::Dict(out))
+fn default() -> Value {
+    native!("default", 1, |_env, args| {
+        Ok(match &args[0] {
+            Value::Unit => Value::Unit,
+            Value::Number(_) => Value::Number(Rational::new().into()),
+            Value::String(_) => Value::String("".into()),
+            Value::Bool(_) => Value::Bool(false),
+            Value::List(_) => Value::List(Vector::new()),
+            Value::Tuple(_) => Value::Tuple(Vector::new()),
+            Value::Dict(_) => Value::Dict(Vector::new()),
+            Value::Set(_) => Value::Set(Vector::new()),
+            Value::Range { .. } => Value::Range {
+                start: Rational::new().into(),
+                end: Some(Rational::new().into()),
+                inclusive: false,
+            },
+            v @ Value::Native { .. } | v @ Value::Function { .. } | v @ Value::Module { .. } => {
+                bail!(
+                    "unsupported operation: default is not supported for {},{},{}",
+                    type_name(v),
+                    type_name(v),
+                    type_name(v)
+                )
             }
-            Value::String(s) => {
-                let mut out = String::new();
-                for ch in s.chars() {
-                    if keep(env, &f, Value::String(ch.to_string().into()))? {
-                        out.push(ch);
-                    }
-                }
-                Ok(Value::String(out.into()))
-            }
-            other => bail!("filter: unsupported collection {}", type_name(&other)),
-        }
+        })
     })
-}
-
-fn keep_each(env: &Env, f: &Value, xs: Vector<Value>) -> Result<Vector<Value>> {
-    let mut out = Vector::new();
-    for x in xs {
-        if keep(env, f, x.clone())? {
-            out.push_back(x);
-        }
-    }
-    Ok(out)
-}
-
-fn keep(env: &Env, f: &Value, x: Value) -> Result<bool> {
-    match apply(env, f.clone(), vec![x])? {
-        Value::Bool(b) => Ok(b),
-        v => bail!("filter: predicate must return bool, got {}", type_name(&v)),
-    }
 }
 
 fn print() -> Value {

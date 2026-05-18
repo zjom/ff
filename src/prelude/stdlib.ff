@@ -1,0 +1,31 @@
+(|>) = left, right => right(left)
+
+Ok = val => (val, ())
+Err = err => ((), err)
+
+map = (f, xs) => match xs
+  x :: rest -> f(x) :: map(f, rest),
+  none -> none
+
+fmap = (f, xs) => match xs
+  () :: rest -> fmap(f, rest),
+  x :: rest -> f(x) :: fmap(f, rest),
+  none -> none
+
+filter = (f,xs) => match xs
+  x :: rest -> if f(x) then x :: filter(f,rest) else filter(f,rest),
+  none -> none
+
+rev_into = (xs, acc) => match xs
+  y :: rest -> rev_into(rest, y :: acc),
+  _ -> acc
+rev = xs => rev_into(xs, default(xs))
+
+take = (n, xs) => (
+  aux = (ys) => if n == 0 then default(ys) else match ys
+    y :: rest -> y :: take(n-1, rest),
+    none -> none
+  aux(rev(xs))
+)
+
+export Ok, Err, map, filter, fmap, take, rev

@@ -5,8 +5,8 @@ use im::vector;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+mod fs;
 mod global;
-mod io;
 
 pub fn install(env: &Env) {
     for (name, f) in global::members() {
@@ -46,7 +46,7 @@ pub(crate) fn dict(entries: Vec<(&str, Value)>) -> Value {
 
 pub(crate) fn native_module(name: &str) -> Option<Value> {
     let members = match name {
-        "io" => io::members(),
+        "fs" => fs::members(),
         _ => return None,
     };
     Some(Value::Module {

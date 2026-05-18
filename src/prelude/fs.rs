@@ -13,11 +13,11 @@ use crate::interpreter::{LazyState, Value, type_name};
 use crate::native;
 
 pub fn members() -> Vec<(&'static str, Value)> {
-    vec![("open_file", open_file())]
+    vec![("open", open_file())]
 }
 
 fn open_file() -> Value {
-    native!("open_file", 1, |_env, args| {
+    native!("open", 1, |_env, args| {
         let Value::String(path) = &args[0] else {
             bail!("open_file expected a string, got {}", type_name(&args[0]));
         };

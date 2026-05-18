@@ -26,12 +26,12 @@ pub fn install(env: &Env) {
 }
 
 pub(crate) fn ok(v: Value) -> Value {
-    Value::List(vector![Value::Atom(":ok".into()), v])
+    Value::List(vector![Value::Atom("ok".into()), v])
 }
 
 pub(crate) fn err(msg: impl Into<String>) -> Value {
     Value::List(vector![
-        Value::Atom(":error".into()),
+        Value::Atom("error".into()),
         Value::String(msg.into().into())
     ])
 }

@@ -45,16 +45,19 @@ fn cons() -> Value {
                     Ok(Value::Set(xs))
                 }
             }
-            (Value::Tuple(kvs), Value::Dict(mut xs)) => {
+            (Value::Tuple(kvs) | Value::List(kvs), Value::Dict(mut xs)) => {
                 if kvs.len() == 2 {
                     let (key, value) = (kvs[0].clone(), kvs[1].clone());
                     xs.retain(|(k, _)| k != &key);
                     xs.push_back((key, value));
                     Ok(Value::Dict(xs))
                 } else {
-                    bail!("unsupported operation: can only cons a length 2 tuple with a dict")
+                    bail!(
+                        "unsupported operation: can only cons a list or tuple of length 2 with a dict"
+                    )
                 }
             }
+
             (left, right) => bail!("unsupported operation: cannot cons {} with {}", left, right),
         }
     })

@@ -3,12 +3,15 @@
 Ok = val => (val, ())
 Err = err => ((), err)
 
+Some = val => (val,)
+None = ((),)
+
 map = (f, xs) => match xs
   x :: rest -> f(x) :: map(f, rest),
   none -> none
 
 fmap = (f, xs) => match xs
-  () :: rest -> fmap(f, rest),
+  () :: rest -> () :: fmap(f, rest),
   x :: rest -> f(x) :: fmap(f, rest),
   none -> none
 
@@ -27,4 +30,4 @@ take = (n, xs) => if n <= 0 then default(xs) else match xs
 
 assert = val => if val != default(val) then val else panic "assert failed"
 
-export (|>), Ok, Err, map, filter, fmap, take, rev, assert
+export (|>), Some, None, Ok, Err, map, filter, fmap, take, rev, assert

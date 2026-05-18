@@ -19,14 +19,14 @@ pub fn force_tail(tail: &Rc<RefCell<LazyState>>) -> Result<Value> {
         return Ok(v.clone());
     }
     let pending = std::mem::replace(&mut *tail.borrow_mut(), LazyState::Forced(Value::Unit));
-    let (body, env) = match pending {
-        LazyState::Pending { body, env } => (body, env),
+    let v = match pending {
+        LazyState::Pending { body, env } => eval_expr(&body, &env)?,
+        LazyState::Native(thunk) => thunk()?,
         LazyState::Forced(v) => {
             *tail.borrow_mut() = LazyState::Forced(v.clone());
             return Ok(v);
         }
     };
-    let v = eval_expr(&body, &env)?;
     *tail.borrow_mut() = LazyState::Forced(v.clone());
     Ok(v)
 }

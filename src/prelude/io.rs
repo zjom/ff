@@ -1,14 +1,15 @@
 use crate::prelude::{dict, err, ok};
-use std::fs;
-use std::io::Write;
+use std::cell::RefCell;
+use std::fs::{self, File};
+use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::rc::Rc;
 
 use anyhow::bail;
-use im::vector;
+use im::{Vector, vector};
 use rug::Rational;
 
-use crate::interpreter::{Value, type_name};
+use crate::interpreter::{LazyState, Value, type_name};
 use crate::native;
 
 pub fn members() -> Vec<(&'static str, Value)> {
@@ -81,14 +82,42 @@ fn read_fn(path: Rc<str>) -> Value {
 
 fn lines_fn(path: Rc<str>) -> Value {
     native!("file.lines", 0, move |_env, _args| {
-        Ok(match fs::read_to_string(&*path) {
-            Ok(s) => {
-                let xs: im::Vector<Value> = s.lines().map(|l| Value::String(l.into())).collect();
-                ok(Value::List(xs))
-            }
+        Ok(match File::open(&*path) {
+            Ok(f) => ok(lines_stream(BufReader::new(f))?),
             Err(e) => err(e.to_string()),
         })
     })
+}
+
+// Walk a `BufReader` one line at a time, producing a `Cons` spine whose tail
+// is a native thunk capturing the (advanced) reader. EOF terminates the spine
+// with `Value::List(empty)` so consumers that flatten or pattern-match see a
+// proper sequence terminator.
+fn lines_stream(mut reader: BufReader<File>) -> anyhow::Result<Value> {
+    let mut buf = String::new();
+    match reader.read_line(&mut buf) {
+        Ok(0) => Ok(Value::List(Vector::new())),
+        Ok(_) => {
+            strip_line_ending(&mut buf);
+            let tail = Rc::new(RefCell::new(LazyState::Native(Box::new(move || {
+                lines_stream(reader)
+            }))));
+            Ok(Value::Cons {
+                head: Rc::new(Value::String(buf.into())),
+                tail,
+            })
+        }
+        Err(e) => bail!("file.lines: {}", e),
+    }
+}
+
+fn strip_line_ending(s: &mut String) {
+    if s.ends_with('\n') {
+        s.pop();
+        if s.ends_with('\r') {
+            s.pop();
+        }
+    }
 }
 
 fn metadata_fn(path: Rc<str>) -> Value {

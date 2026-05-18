@@ -9,10 +9,27 @@ use crate::ast::Expr;
 use super::number::format_rational;
 use super::scope::Env;
 
-#[derive(Debug, Clone)]
 pub enum LazyState {
     Pending { body: Expr, env: Env },
     Forced(Value),
+    // A native-built thunk. Used by stdlib streams (e.g. `file.lines`) that
+    // can't be expressed as an AST expression because they carry Rust state
+    // like an open `BufReader`.
+    Native(Box<dyn FnOnce() -> anyhow::Result<Value>>),
+}
+
+impl std::fmt::Debug for LazyState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LazyState::Pending { body, env } => f
+                .debug_struct("Pending")
+                .field("body", body)
+                .field("env", env)
+                .finish(),
+            LazyState::Forced(v) => f.debug_tuple("Forced").field(v).finish(),
+            LazyState::Native(_) => f.write_str("Native(<thunk>)"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

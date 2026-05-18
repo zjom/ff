@@ -273,7 +273,8 @@ assignment = { pattern ~ assign ~ expr }
 // `export Left, Right` exports the named bindings from the current module.
 // `export *` snapshots every local binding visible at the call site.
 export_all   = { "*" ~ !op_char }
-export_names = { ident ~ (NEWLINE* ~ "," ~ NEWLINE* ~ ident)* ~ (NEWLINE* ~ ",")? }
+export_name  = { op_paren | ident }
+export_names = { export_name ~ (NEWLINE* ~ "," ~ NEWLINE* ~ export_name)* ~ (NEWLINE* ~ ",")? }
 export_stmt  = { "export" ~ NEWLINE* ~ (export_all | export_names) }
 
 statement = _{ export_stmt | assignment | expr }

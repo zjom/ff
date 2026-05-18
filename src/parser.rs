@@ -66,7 +66,24 @@ fn build_export(pair: Pair<Rule>) -> Result<ExportKind> {
     match inner.as_rule() {
         Rule::export_all => Ok(ExportKind::All),
         Rule::export_names => Ok(ExportKind::Names(
-            inner.into_inner().map(|p| p.as_str().to_string()).collect(),
+            inner
+                .into_inner()
+                .map(|p| {
+                    let inner = p
+                        .into_inner()
+                        .next()
+                        .ok_or_else(|| anyhow!("empty export name"))?;
+                    Ok(match inner.as_rule() {
+                        Rule::op_paren => inner
+                            .into_inner()
+                            .next()
+                            .ok_or_else(|| anyhow!("empty op_paren"))?
+                            .as_str()
+                            .to_string(),
+                        _ => inner.as_str().to_string(),
+                    })
+                })
+                .collect::<Result<_>>()?,
         )),
         r => Err(anyhow!("unexpected export form: {:?}", r)),
     }

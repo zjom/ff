@@ -28,4 +28,4 @@ take = (n, xs) => (
   aux(rev(xs))
 )
 
-export Ok, Err, map, filter, fmap, take, rev
+export (|>), Ok, Err, map, filter, fmap, take, rev

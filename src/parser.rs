@@ -216,6 +216,7 @@ fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
                 let inner = op.into_inner().next().ok_or_else(|| anyhow!("empty dot"))?;
                 let key = match inner.as_rule() {
                     Rule::dot_index => AccessKey::Index(inner.as_str().parse()?),
+                    Rule::atom => AccessKey::Atom(inner.as_str()[1..].to_string()),
                     Rule::ident => AccessKey::Field(inner.as_str().to_string()),
                     r => return Err(anyhow!("unexpected dot key: {:?}", r)),
                 };

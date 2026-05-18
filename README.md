@@ -180,10 +180,14 @@ handle(safe_div(10, 2))      # 5
 handle(safe_div(10, 0))      # -1
 ```
 
-Atoms work anywhere a value does — list/set elements, dict keys, and patterns:
+Atoms work anywhere a value does — list/set elements, dict keys, and patterns.
+Dicts keyed by atoms read back with `.:name`:
 
 ```ff
-{:name: who} = {:name: "ada", :age: 36}    # who = "ada"
+m = {:name: "ada", :age: 36}
+m.:name                                    # "ada"
+
+{:name: who} = m                           # who = "ada"
 ```
 
 ## custom operators

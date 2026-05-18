@@ -287,6 +287,13 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                         .map(|(_, v)| v.clone())
                         .ok_or_else(|| anyhow!("dict has no key {:?}", name))
                 }
+                (Value::Dict(es), AccessKey::Atom(name)) => {
+                    let k = Value::Atom(name.as_str().into());
+                    es.iter()
+                        .find(|(ek, _)| ek == &k)
+                        .map(|(_, v)| v.clone())
+                        .ok_or_else(|| anyhow!("dict has no key :{}", name))
+                }
                 (Value::Module { members, .. }, AccessKey::Field(name)) => members
                     .get(name)
                     .cloned()
@@ -296,6 +303,9 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                 }
                 (v, AccessKey::Field(name)) => {
                     bail!("cannot read field .{} from {}", name, type_name(v))
+                }
+                (v, AccessKey::Atom(name)) => {
+                    bail!("cannot read field .:{} from {}", name, type_name(v))
                 }
             }
         }

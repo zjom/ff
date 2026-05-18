@@ -111,6 +111,8 @@ pub enum PatternItem {
 pub enum AccessKey {
     Index(usize),
     Field(String),
+    // `dict.:foo` — look up the atom key `:foo`.
+    Atom(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

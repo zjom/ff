@@ -143,3 +143,12 @@ fn atom_in_collections() {
     assert_eq!(eval("{:a, :b, :a}"), "{:a, :b}");
     assert_eq!(eval("{:ok: 1, :error: 2}"), "{:ok: 1, :error: 2}");
 }
+
+#[test]
+fn dot_atom_dict_access() {
+    assert_eq!(eval("{:a: 1, :b: 2}.:a"), "1");
+    assert_eq!(eval("{:ok: 42}.:ok"), "42");
+    // Atom-keyed and string-keyed entries are distinct.
+    assert_eq!(eval(r#"{:a: 1, "a": 99}.:a"#), "1");
+    assert_eq!(eval(r#"{:a: 1, "a": 99}.a"#), "99");
+}

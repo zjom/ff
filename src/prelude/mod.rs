@@ -12,6 +12,17 @@ pub fn install(env: &Env) {
     for (name, f) in global::members() {
         define(env, name, f);
     }
+
+    let program = parse(include_str!("stdlib.ff")).expect("failed to parse stdlib.ff");
+    let ctx = ctx_of(env);
+    let module_env = Scope::child(env.clone());
+    let prev_exports = ctx.current_exports.replace(Some(HashMap::new()));
+    let result = eval_program(&program, &module_env);
+    let exports = ctx.current_exports.replace(prev_exports);
+    result.expect("failed to evaluate stdlib.ff");
+    for (name, value) in exports.unwrap_or_default() {
+        define(env, &name, value);
+    }
 }
 
 pub(crate) fn ok(v: Value) -> Value {

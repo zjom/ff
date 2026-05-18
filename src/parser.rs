@@ -12,10 +12,8 @@ pub struct FFParser;
 
 lazy_static! {
     static ref PRATT: PrattParser<Rule> = PrattParser::new()
-        .op(Op::infix(Rule::logical_or, Assoc::Left)
-            | Op::infix(Rule::custom_op_or, Assoc::Left))
-        .op(Op::infix(Rule::logical_and, Assoc::Left)
-            | Op::infix(Rule::custom_op_and, Assoc::Left))
+        .op(Op::infix(Rule::logical_or, Assoc::Left) | Op::infix(Rule::custom_op_or, Assoc::Left))
+        .op(Op::infix(Rule::logical_and, Assoc::Left) | Op::infix(Rule::custom_op_and, Assoc::Left))
         .op(Op::infix(Rule::eq, Assoc::Left)
             | Op::infix(Rule::ne, Assoc::Left)
             | Op::infix(Rule::custom_op_comp, Assoc::Left))
@@ -25,8 +23,7 @@ lazy_static! {
             | Op::infix(Rule::ge, Assoc::Left)
             | Op::infix(Rule::match_op, Assoc::Left)
             | Op::infix(Rule::not_match, Assoc::Left))
-        .op(Op::infix(Rule::custom_op_cat, Assoc::Right)
-            | Op::infix(Rule::cons_op, Assoc::Right))
+        .op(Op::infix(Rule::custom_op_cat, Assoc::Right) | Op::infix(Rule::cons_op, Assoc::Right))
         .op(Op::infix(Rule::add, Assoc::Left)
             | Op::infix(Rule::subtract, Assoc::Left)
             | Op::infix(Rule::custom_op_add, Assoc::Left))
@@ -35,9 +32,7 @@ lazy_static! {
             | Op::infix(Rule::modulo, Assoc::Left)
             | Op::infix(Rule::custom_op_mult, Assoc::Left))
         .op(Op::infix(Rule::power, Assoc::Right) | Op::infix(Rule::custom_op_pow, Assoc::Right))
-        .op(Op::prefix(Rule::neg)
-            | Op::prefix(Rule::logical_not)
-            | Op::prefix(Rule::custom_prefix))
+        .op(Op::prefix(Rule::neg) | Op::prefix(Rule::logical_not) | Op::prefix(Rule::custom_prefix))
         .op(Op::postfix(Rule::call_args)
             | Op::postfix(Rule::dot_access)
             | Op::postfix(Rule::juxt_arg));
@@ -136,9 +131,7 @@ fn build_pattern(pair: Pair<Rule>) -> Result<Pattern> {
                     Rule::expr => {
                         let key = build_expr(first)?;
                         let val = build_pattern(
-                            inner
-                                .next()
-                                .ok_or_else(|| anyhow!("missing dict value"))?,
+                            inner.next().ok_or_else(|| anyhow!("missing dict value"))?,
                         )?;
                         entries.push((key, val));
                     }
@@ -273,6 +266,28 @@ fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
         .parse(pair.into_inner())
 }
 
+fn build_range(pair: Pair<Rule>) -> Result<Expr> {
+    let kind = pair.as_rule();
+    let mut inner = pair.into_inner();
+    let start = build_expr(inner.next().ok_or_else(|| anyhow!("missing range start"))?)?;
+    match kind {
+        Rule::range_open => Ok(Expr::Range {
+            start: Box::new(start),
+            end: None,
+            inclusive: false,
+        }),
+        Rule::range_excl | Rule::range_incl => {
+            let end = build_expr(inner.next().ok_or_else(|| anyhow!("missing range end"))?)?;
+            Ok(Expr::Range {
+                start: Box::new(start),
+                end: Some(Box::new(end)),
+                inclusive: kind == Rule::range_incl,
+            })
+        }
+        r => Err(anyhow!("unexpected range form: {:?}", r)),
+    }
+}
+
 fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
     match pair.as_rule() {
         Rule::number => Ok(Expr::Number(parse_number(pair.as_str())?)),
@@ -286,9 +301,18 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
                 .ok_or_else(|| anyhow!("empty op_paren"))?;
             Ok(Expr::Ident(name.as_str().to_string()))
         }
-        Rule::list => Ok(Expr::List(
-            pair.into_inner().map(build_expr).collect::<Result<_>>()?,
-        )),
+        Rule::list => {
+            let mut inner = pair.into_inner().peekable();
+            if let Some(first) = inner.peek()
+                && matches!(
+                    first.as_rule(),
+                    Rule::range_incl | Rule::range_excl | Rule::range_open
+                )
+            {
+                return build_range(inner.next().unwrap());
+            }
+            Ok(Expr::List(inner.map(build_expr).collect::<Result<_>>()?))
+        }
         Rule::tuple => Ok(Expr::Tuple(
             pair.into_inner().map(build_expr).collect::<Result<_>>()?,
         )),
@@ -365,7 +389,11 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
                         None
                     };
                     let body = build_expr(next)?;
-                    Ok(MatchArm { pattern, guard, body })
+                    Ok(MatchArm {
+                        pattern,
+                        guard,
+                        body,
+                    })
                 })
                 .collect::<Result<Vec<_>>>()?;
             match scrutinee_expr {

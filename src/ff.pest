@@ -13,7 +13,9 @@ keyword = @{
 }
 
 // ----- Literals & identifiers -----
-number   = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT*)? }
+// `!"."` lookahead on the fractional dot keeps `0..` from being read as `0.`
+// followed by `.` — the range syntax `[a..b]` needs the bare `..` to survive.
+number   = @{ ASCII_DIGIT+ ~ ("." ~ !"." ~ ASCII_DIGIT*)? }
 string   = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 bool     = @{ ("true" | "false") ~ !(ASCII_ALPHANUMERIC | "_") }
 ident    = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
@@ -162,8 +164,18 @@ cons_op = @{ "::" }
 pattern_cons = { pattern_atom ~ (cons_op ~ pattern_atom)+ }
 pattern = _{ pattern_cons | pattern_atom }
 
+// ----- Ranges -----
+// `[a..]` infinite, `[a..b]` exclusive, `[a..=b]` inclusive. Lazy at runtime —
+// no expansion into a list. PEG order: try `..=` first; the bare-`..` variants
+// use `!"="` so they don't also consume an inclusive marker.
+range_incl = { expr ~ "..=" ~ expr }
+range_excl = { expr ~ ".." ~ !"=" ~ expr }
+range_open = { expr ~ ".." ~ !"=" }
+range      = _{ range_incl | range_excl | range_open }
+
 // ----- Collections (expressions) -----
-list  = { "[" ~ coll_sep? ~ (expr ~ (coll_sep ~ expr)* ~ coll_sep?)? ~ "]" }
+list  = { "[" ~ NEWLINE* ~ range ~ NEWLINE* ~ "]"
+        | "[" ~ coll_sep? ~ (expr ~ (coll_sep ~ expr)* ~ coll_sep?)? ~ "]" }
 tuple = {
       "(" ~ NEWLINE* ~ ")"
     | "(" ~ NEWLINE* ~ expr ~ tuple_sep ~ (expr ~ (tuple_sep ~ expr)* ~ tuple_sep?)? ~ NEWLINE* ~ ")"

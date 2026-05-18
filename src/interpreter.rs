@@ -18,6 +18,13 @@ pub enum Value {
     Tuple(Vector<Value>),
     Dict(Vector<(Value, Value)>),
     Set(Vector<Value>),
+    // Lazy integer-step range. `end == None` is infinite (`[start..]`);
+    // `inclusive` distinguishes `[a..b]` from `[a..=b]`. Step is always +1.
+    Range {
+        start: Rc<Rational>,
+        end: Option<Rc<Rational>>,
+        inclusive: bool,
+    },
     Function {
         params: Vec<String>,
         body: Expr,
@@ -249,7 +256,7 @@ fn eval_statement(stmt: &Statement, env: &Env) -> Result<Value> {
     }
 }
 
-fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
+pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
     match expr {
         Expr::Number(n) => Ok(Value::Number(Rc::new(n.clone()))),
         Expr::String(s) => Ok(Value::String(s.as_str().into())),
@@ -333,6 +340,31 @@ fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                 .map(|a| eval_expr(a, env))
                 .collect::<Result<_>>()?;
             apply(env, callee_val, arg_vals)
+        }
+        Expr::Range {
+            start,
+            end,
+            inclusive,
+        } => {
+            let start_v = eval_expr(start, env)?;
+            let Value::Number(s) = start_v else {
+                bail!("range start must be a number, got {}", type_name(&start_v));
+            };
+            let end_v = match end {
+                None => None,
+                Some(e) => {
+                    let v = eval_expr(e, env)?;
+                    let Value::Number(n) = v else {
+                        bail!("range end must be a number, got {}", type_name(&v));
+                    };
+                    Some(n)
+                }
+            };
+            Ok(Value::Range {
+                start: s,
+                end: end_v,
+                inclusive: *inclusive,
+            })
         }
         Expr::Import(path) => {
             let v = eval_expr(path, env)?;
@@ -450,9 +482,7 @@ fn eval_binary(op: BinaryOp, lhs: &Expr, rhs: &Expr, env: &Env) -> Result<Value>
         (BinaryOp::Le, Value::String(a), Value::String(b)) => Ok(Value::Bool(a <= b)),
         (BinaryOp::Gt, Value::String(a), Value::String(b)) => Ok(Value::Bool(a > b)),
         (BinaryOp::Ge, Value::String(a), Value::String(b)) => Ok(Value::Bool(a >= b)),
-        (BinaryOp::Match, Value::String(a), Value::String(b)) => {
-            Ok(Value::Bool(a.contains(&**b)))
-        }
+        (BinaryOp::Match, Value::String(a), Value::String(b)) => Ok(Value::Bool(a.contains(&**b))),
         (BinaryOp::NotMatch, Value::String(a), Value::String(b)) => {
             Ok(Value::Bool(!a.contains(&**b)))
         }
@@ -489,7 +519,14 @@ fn match_into(
         Pattern::Number(n) => Ok(matches!(val, Value::Number(m) if **m == *n)),
         Pattern::String(s) => Ok(matches!(val, Value::String(t) if **t == **s)),
         Pattern::Bool(p) => Ok(matches!(val, Value::Bool(b) if b == p)),
-        Pattern::List(items) => match_seq(items, val, env, bindings, true),
+        Pattern::List(items) => match val {
+            Value::Range {
+                start,
+                end,
+                inclusive,
+            } => match_seq_range(items, start, end.as_deref(), *inclusive, env, bindings),
+            _ => match_seq(items, val, env, bindings, true),
+        },
         Pattern::Tuple(items) => match_seq(items, val, env, bindings, false),
         Pattern::Dict(entries) => match val {
             Value::Dict(d) => {
@@ -568,8 +605,118 @@ fn match_into(
                 rest.pop_front();
                 match_into(tail, &Value::Dict(rest), env, bindings)
             }
+            Value::Range {
+                start,
+                end,
+                inclusive,
+            } => {
+                if !range_has_elem(start, end.as_deref(), *inclusive) {
+                    return Ok(false);
+                }
+                let h = Value::Number(start.clone());
+                if !match_into(head, &h, env, bindings)? {
+                    return Ok(false);
+                }
+                let t = Value::Range {
+                    start: Rc::new(rat_succ(start)),
+                    end: end.clone(),
+                    inclusive: *inclusive,
+                };
+                match_into(tail, &t, env, bindings)
+            }
             _ => Ok(false),
         },
+    }
+}
+
+pub(crate) fn range_has_elem(cur: &Rational, end: Option<&Rational>, inclusive: bool) -> bool {
+    match end {
+        None => true,
+        Some(e) => {
+            if inclusive {
+                cur <= e
+            } else {
+                cur < e
+            }
+        }
+    }
+}
+
+fn rat_succ(r: &Rational) -> Rational {
+    let mut out = r.clone();
+    out += 1;
+    out
+}
+
+fn match_seq_range(
+    items: &[PatternItem],
+    start: &Rc<Rational>,
+    end: Option<&Rational>,
+    inclusive: bool,
+    env: &Env,
+    bindings: &mut HashMap<String, Value>,
+) -> Result<bool> {
+    let rest_idx = items.iter().position(|i| matches!(i, PatternItem::Rest(_)));
+    let mut cur: Rational = (**start).clone();
+    match rest_idx {
+        None => {
+            // Exact-length list pattern: peel one element per item, then the
+            // range must be exhausted. Infinite ranges never match exact length.
+            for p in items {
+                let PatternItem::Pattern(p) = p else {
+                    unreachable!()
+                };
+                if !range_has_elem(&cur, end, inclusive) {
+                    return Ok(false);
+                }
+                let elem = Value::Number(Rc::new(cur.clone()));
+                if !match_into(p, &elem, env, bindings)? {
+                    return Ok(false);
+                }
+                cur += 1;
+            }
+            if range_has_elem(&cur, end, inclusive) {
+                return Ok(false);
+            }
+            Ok(true)
+        }
+        Some(idx) => {
+            let before = &items[..idx];
+            let after = &items[idx + 1..];
+            if after.iter().any(|i| matches!(i, PatternItem::Rest(_))) {
+                bail!("multiple `..` patterns in one sequence");
+            }
+            // `[a, .., b]` against a range would need to seek from the end —
+            // only finite ranges have one, and even then the user can convert
+            // to a list explicitly. Refuse for now.
+            if !after.is_empty() {
+                return Ok(false);
+            }
+            for p in before {
+                let PatternItem::Pattern(p) = p else {
+                    unreachable!()
+                };
+                if !range_has_elem(&cur, end, inclusive) {
+                    return Ok(false);
+                }
+                let elem = Value::Number(Rc::new(cur.clone()));
+                if !match_into(p, &elem, env, bindings)? {
+                    return Ok(false);
+                }
+                cur += 1;
+            }
+            if let PatternItem::Rest(Some(name)) = &items[idx] {
+                bindings.insert(
+                    name.clone(),
+                    Value::Range {
+                        start: Rc::new(cur),
+                        end: end.map(|e| Rc::new(e.clone())),
+                        inclusive,
+                    },
+                );
+            }
+            Ok(true)
+        }
     }
 }
 
@@ -680,6 +827,26 @@ fn value_eq(a: &Value, b: &Value) -> bool {
         (Value::Set(x), Value::Set(y)) => {
             x.len() == y.len() && x.iter().all(|a| y.iter().any(|b| value_eq(a, b)))
         }
+        (
+            Value::Range {
+                start: s1,
+                end: e1,
+                inclusive: i1,
+            },
+            Value::Range {
+                start: s2,
+                end: e2,
+                inclusive: i2,
+            },
+        ) => {
+            s1 == s2
+                && i1 == i2
+                && match (e1, e2) {
+                    (None, None) => true,
+                    (Some(a), Some(b)) => a == b,
+                    _ => false,
+                }
+        }
         _ => false,
     }
 }
@@ -739,6 +906,20 @@ impl std::fmt::Display for Value {
                     write!(f, "{}", x)?;
                 }
                 write!(f, "}}")
+            }
+            Value::Range {
+                start,
+                end,
+                inclusive,
+            } => {
+                write!(f, "[{}..", format_rational(start))?;
+                if *inclusive {
+                    write!(f, "=")?;
+                }
+                if let Some(e) = end {
+                    write!(f, "{}", format_rational(e))?;
+                }
+                write!(f, "]")
             }
             Value::Function { params, .. } => write!(f, "<fn ({})>", params.join(", ")),
             Value::Native { name, .. } => write!(f, "<native {}>", name),
@@ -844,6 +1025,7 @@ pub fn type_name(v: &Value) -> &'static str {
         Value::Tuple(_) => "tuple",
         Value::Dict(_) => "dict",
         Value::Set(_) => "set",
+        Value::Range { .. } => "range",
         Value::Function { .. } => "function",
         Value::Native { .. } => "native",
         Value::Module { .. } => "module",

@@ -49,6 +49,11 @@ pub enum Expr {
         callee: Box<Expr>,
         args: Vec<Expr>,
     },
+    Range {
+        start: Box<Expr>,
+        end: Option<Box<Expr>>,
+        inclusive: bool,
+    },
     Import(Box<Expr>),
     Scope(Vec<Statement>),
     Access {

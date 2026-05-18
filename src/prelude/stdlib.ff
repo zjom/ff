@@ -28,6 +28,14 @@ take = (n, xs) => if n <= 0 then default(xs) else match xs
   y :: rest -> y :: take(n-1, rest),
   none -> none
 
+reduce = (f, acc, xs) => match xs
+  y :: rest -> reduce(f, f(acc, y), rest),
+  _ -> acc
+
+fold = (f, acc, xs) => match xs
+  y :: rest -> f(y, fold(f, acc, rest)),
+  _ -> acc
+
 assert = val => if val != default(val) then val else panic "assert failed"
 
-export (|>), Some, None, Ok, Err, map, filter, fmap, take, rev, assert
+export (|>), Some, None, Ok, Err, map, filter, fmap, take, rev, reduce, fold, assert

@@ -1,4 +1,6 @@
 (|>) = left, right => right(left)
+(<<) = (f, g) => x => f(g(x))
+(>>) = (f, g) => x => g(f(x))
 
 map = (f, xs) => match xs
   x :: rest -> f(x) :: map(f, rest),
@@ -27,4 +29,4 @@ fold = (f, acc, xs) => match xs
 
 assert = val => if val != default(val) then val else panic "assert failed"
 
-export (|>), map, filter, take, rev, reduce, fold, assert
+export (|>), (<<), (>>), map, filter, take, rev, reduce, fold, assert

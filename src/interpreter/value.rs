@@ -21,6 +21,8 @@ pub enum Value {
     Number(Rc<Rational>),
     String(Rc<str>),
     Bool(bool),
+    // `:name` — Elixir-style atom. Equal iff names match; prints as `:name`.
+    Atom(Rc<str>),
     List(Vector<Value>),
     Tuple(Vector<Value>),
     Dict(Vector<(Value, Value)>),
@@ -74,6 +76,7 @@ pub fn type_name(v: &Value) -> &'static str {
         Value::Number(_) => "number",
         Value::String(_) => "string",
         Value::Bool(_) => "bool",
+        Value::Atom(_) => "atom",
         Value::List(_) => "list",
         Value::Tuple(_) => "tuple",
         Value::Dict(_) => "dict",
@@ -103,6 +106,7 @@ fn value_eq(a: &Value, b: &Value) -> bool {
         (Value::Number(x), Value::Number(y)) => x == y,
         (Value::String(x), Value::String(y)) => x == y,
         (Value::Bool(x), Value::Bool(y)) => x == y,
+        (Value::Atom(x), Value::Atom(y)) => x == y,
         (Value::List(x), Value::List(y)) | (Value::Tuple(x), Value::Tuple(y)) => {
             x.len() == y.len() && x.iter().zip(y).all(|(a, b)| value_eq(a, b))
         }
@@ -228,6 +232,7 @@ impl std::fmt::Display for Value {
             Value::Number(n) => write!(f, "{}", format_rational(n)),
             Value::String(s) => write!(f, "{:?}", s),
             Value::Bool(b) => write!(f, "{}", b),
+            Value::Atom(name) => write!(f, ":{}", name),
             Value::List(xs) => {
                 write!(f, "[")?;
                 for (i, x) in xs.iter().enumerate() {

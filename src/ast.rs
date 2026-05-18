@@ -27,6 +27,8 @@ pub enum Expr {
     Number(rug::Rational),
     String(String),
     Bool(bool),
+    // `:name` — Elixir-style atom. Self-evaluating; equal by name.
+    Atom(String),
     Ident(String),
     List(Vec<Expr>),
     Tuple(Vec<Expr>),
@@ -85,6 +87,7 @@ pub enum Pattern {
     Number(rug::Rational),
     String(String),
     Bool(bool),
+    Atom(String),
     List(Vec<PatternItem>),
     Tuple(Vec<PatternItem>),
     Dict(Vec<(Expr, Pattern)>),

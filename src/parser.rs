@@ -123,6 +123,7 @@ fn build_pattern(pair: Pair<Rule>) -> Result<Pattern> {
         Rule::number => Ok(Pattern::Number(parse_number(pair.as_str())?)),
         Rule::string => Ok(Pattern::String(unquote(pair.as_str()))),
         Rule::bool => Ok(Pattern::Bool(pair.as_str() == "true")),
+        Rule::atom => Ok(Pattern::Atom(pair.as_str()[1..].to_string())),
         Rule::pattern_list => Ok(Pattern::List(
             pair.into_inner()
                 .map(build_pattern_item)
@@ -310,6 +311,7 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
         Rule::number => Ok(Expr::Number(parse_number(pair.as_str())?)),
         Rule::string => Ok(Expr::String(unquote(pair.as_str()))),
         Rule::bool => Ok(Expr::Bool(pair.as_str() == "true")),
+        Rule::atom => Ok(Expr::Atom(pair.as_str()[1..].to_string())),
         Rule::ident => Ok(Expr::Ident(pair.as_str().to_string())),
         Rule::op_paren => {
             let name = pair

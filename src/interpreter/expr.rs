@@ -159,6 +159,7 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
         Expr::Number(n) => Ok(Value::Number(Rc::new(n.clone()))),
         Expr::String(s) => Ok(Value::String(s.as_str().into())),
         Expr::Bool(b) => Ok(Value::Bool(*b)),
+        Expr::Atom(name) => Ok(Value::Atom(name.as_str().into())),
         Expr::Ident(name) => {
             lookup(env, name).ok_or_else(|| anyhow!("undefined variable: {}", name))
         }

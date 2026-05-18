@@ -119,3 +119,27 @@ fn assignment_sequence() {
 fn rebinding() {
     assert_eq!(eval("x = 1\nx = x + 1\nx = x + 1\nx"), "3");
 }
+
+#[test]
+fn atom_literal() {
+    assert_eq!(eval(":ok"), ":ok");
+    assert_eq!(eval(":hello_world"), ":hello_world");
+    assert_eq!(eval(":_priv"), ":_priv");
+}
+
+#[test]
+fn atom_equality() {
+    assert_eq!(eval(":ok == :ok"), "true");
+    assert_eq!(eval(":ok == :error"), "false");
+    assert_eq!(eval(":ok != :error"), "true");
+    // Atoms are their own type — never equal to a string of the same name.
+    assert_eq!(eval(r#":ok == "ok""#), "false");
+}
+
+#[test]
+fn atom_in_collections() {
+    assert_eq!(eval("[:a, :b, :c]"), "[:a, :b, :c]");
+    assert_eq!(eval("(:ok, 1)"), "(:ok, 1)");
+    assert_eq!(eval("{:a, :b, :a}"), "{:a, :b}");
+    assert_eq!(eval("{:ok: 1, :error: 2}"), "{:ok: 1, :error: 2}");
+}

@@ -21,6 +21,11 @@ bool     = @{ ("true" | "false") ~ !(ASCII_ALPHANUMERIC | "_") }
 ident    = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 wildcard = @{ "_" ~ !(ASCII_ALPHANUMERIC | "_") }
 
+// Elixir-style atom: `:name`. Self-evaluating constant, equal by name.
+// `:` is not an `op_char`, so atoms can't collide with custom operators or
+// with the `::` cons token (which would fail the `ASCII_ALPHA | "_"` start).
+atom = @{ ":" ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
 // ----- Operator tokens -----
 // Operator characters. Built-in op tokens forbid an op_char tail so that a
 // longer sequence (e.g. `++`, `+>`) is never consumed as the built-in prefix.
@@ -149,6 +154,7 @@ pattern_atom = _{
     | number
     | string
     | bool
+    | atom
     | wildcard
     | ident
 }
@@ -249,6 +255,7 @@ primary = _{
     | number
     | string
     | bool
+    | atom
     | list
     | dict
     | set

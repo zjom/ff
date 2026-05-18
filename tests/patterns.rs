@@ -255,3 +255,23 @@ fn match_as_function_list_dispatch() {
     let src = "describe = match\n  [] -> \"empty\",\n  [x] -> \"one\",\n  _ -> \"many\"\ndescribe [1, 2, 3]";
     assert_eq!(eval(src), r#""many""#);
 }
+
+#[test]
+fn match_atom_literal() {
+    let src = "name = match\n  :ok -> \"yes\",\n  :error -> \"no\",\n  _ -> \"?\"\nname :error";
+    assert_eq!(eval(src), r#""no""#);
+}
+
+#[test]
+fn match_tagged_tuple() {
+    let src = "result = (:ok, 42)\nmatch result\n  (:ok, v) -> v,\n  (:error, _) -> -1";
+    assert_eq!(eval(src), "42");
+}
+
+#[test]
+fn destructure_dict_with_atom_key() {
+    assert_eq!(
+        eval("{:name: who} = {:name: \"ada\", :age: 36}\nwho"),
+        r#""ada""#
+    );
+}

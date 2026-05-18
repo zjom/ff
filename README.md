@@ -159,6 +159,33 @@ match safe_div(10, 0)
   (v,)  -> v          # Some — singleton binds anything
 ```
 
+## atoms
+
+`:name` is an atom — a self-evaluating constant that compares equal only to
+itself. Pairs well with tuples and pattern matching for tagged-union style.
+
+```ff
+:ok                          # :ok
+:ok == :ok                   # true
+:ok == :error                # false
+
+safe_div = (a, b) =>
+  if b == 0 then (:error, "div0") else (:ok, a / b)
+
+handle = match
+  (:ok, v)      -> v,
+  (:error, msg) -> -1
+
+handle(safe_div(10, 2))      # 5
+handle(safe_div(10, 0))      # -1
+```
+
+Atoms work anywhere a value does — list/set elements, dict keys, and patterns:
+
+```ff
+{:name: who} = {:name: "ada", :age: 36}    # who = "ada"
+```
+
 ## custom operators
 
 Any sequence of operator characters can be a user-defined infix; precedence is

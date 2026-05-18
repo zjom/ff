@@ -39,6 +39,7 @@ fn match_into(
         Pattern::Number(n) => Ok(matches!(val, Value::Number(m) if **m == *n)),
         Pattern::String(s) => Ok(matches!(val, Value::String(t) if **t == **s)),
         Pattern::Bool(p) => Ok(matches!(val, Value::Bool(b) if b == p)),
+        Pattern::Atom(name) => Ok(matches!(val, Value::Atom(n) if n.as_ref() == name.as_str())),
         Pattern::List(items) => match val {
             Value::Range {
                 start,

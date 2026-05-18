@@ -147,18 +147,6 @@ match map(x => x * 2, [0..])         # infinite range
 [0..] |> filter(x => x % 2 == 0) |> take 5    # [0, 2, 4, 6, 8]
 ```
 
-## option and result
-
-Defined in the prelude as plain tuples — no special syntax:
-
-```ff
-safe_div = (a, b) => if b == 0 then None else Some(a / b)
-
-match safe_div(10, 0)
-  ((),) -> 0,         # None — match literal first
-  (v,)  -> v          # Some — singleton binds anything
-```
-
 ## atoms
 
 `:name` is an atom — a self-evaluating constant that compares equal only to

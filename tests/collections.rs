@@ -23,23 +23,8 @@ fn list_index() {
 }
 
 #[test]
-fn empty_tuple() {
+fn unit_literal() {
     assert_eq!(eval("()"), "()");
-}
-
-#[test]
-fn singleton_tuple() {
-    assert_eq!(eval("(7,)"), "(7,)");
-}
-
-#[test]
-fn tuple_literal() {
-    assert_eq!(eval("(1, 2, 3)"), "(1, 2, 3)");
-}
-
-#[test]
-fn tuple_index() {
-    assert_eq!(eval("(100, 200).1"), "200");
 }
 
 #[test]
@@ -107,16 +92,6 @@ fn list_extra_commas_and_newlines_collapse() {
 #[test]
 fn list_leading_and_trailing_separators() {
     assert_eq!(eval("[\n  ,1,\n  2,\n]"), "[1, 2]");
-}
-
-#[test]
-fn tuple_multiline() {
-    assert_eq!(eval("(\n1,\n2,\n3\n)"), "(1, 2, 3)");
-}
-
-#[test]
-fn tuple_singleton_trailing_newline() {
-    assert_eq!(eval("(7,\n)"), "(7,)");
 }
 
 #[test]

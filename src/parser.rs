@@ -129,11 +129,7 @@ fn build_pattern(pair: Pair<Rule>) -> Result<Pattern> {
                 .map(build_pattern_item)
                 .collect::<Result<_>>()?,
         )),
-        Rule::pattern_tuple => Ok(Pattern::Tuple(
-            pair.into_inner()
-                .map(build_pattern_item)
-                .collect::<Result<_>>()?,
-        )),
+        Rule::pattern_unit => Ok(Pattern::Unit),
         Rule::pattern_dict => {
             let mut entries = Vec::new();
             for entry in pair.into_inner() {
@@ -333,9 +329,7 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
             }
             Ok(Expr::List(inner.map(build_expr).collect::<Result<_>>()?))
         }
-        Rule::tuple => Ok(Expr::Tuple(
-            pair.into_inner().map(build_expr).collect::<Result<_>>()?,
-        )),
+        Rule::unit => Ok(Expr::Unit),
         Rule::dict => {
             let mut entries = Vec::new();
             for entry in pair.into_inner() {

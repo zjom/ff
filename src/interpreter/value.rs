@@ -24,7 +24,6 @@ pub enum Value {
     // `:name` — Elixir-style atom. Equal iff names match; prints as `:name`.
     Atom(Rc<str>),
     List(Vector<Value>),
-    Tuple(Vector<Value>),
     Dict(Vector<(Value, Value)>),
     Set(Vector<Value>),
     // Lazy integer-step range. `end == None` is infinite (`[start..]`);
@@ -78,7 +77,6 @@ pub fn type_name(v: &Value) -> &'static str {
         Value::Bool(_) => "bool",
         Value::Atom(_) => "atom",
         Value::List(_) => "list",
-        Value::Tuple(_) => "tuple",
         Value::Dict(_) => "dict",
         Value::Set(_) => "set",
         Value::Range { .. } => "range",
@@ -107,7 +105,7 @@ fn value_eq(a: &Value, b: &Value) -> bool {
         (Value::String(x), Value::String(y)) => x == y,
         (Value::Bool(x), Value::Bool(y)) => x == y,
         (Value::Atom(x), Value::Atom(y)) => x == y,
-        (Value::List(x), Value::List(y)) | (Value::Tuple(x), Value::Tuple(y)) => {
+        (Value::List(x), Value::List(y)) => {
             x.len() == y.len() && x.iter().zip(y).all(|(a, b)| value_eq(a, b))
         }
         (Value::Dict(x), Value::Dict(y)) => {
@@ -151,12 +149,12 @@ impl core::cmp::PartialEq for Value {
 /// Force a Cons spine into a flat Vec of its elements. Returns None if a thunk
 /// fails to evaluate, or if the terminator type has no natural sequence
 /// (number, bool, function, etc.). Strings flatten to one-char string values,
-/// dicts to `(k, v)` tuples, ranges to numbers, so cross-type equality like
+/// dicts to `[k, v]` pairs, ranges to numbers, so cross-type equality like
 /// `take(3, "hel") == "hel"` and `cons-built-dict == literal-dict` works.
 fn flatten_cons(v: &Value) -> Option<Vec<Value>> {
     let (mut items, mut cur_tail) = match v {
         Value::Cons { head, tail } => (vec![(**head).clone()], tail.clone()),
-        Value::List(xs) | Value::Tuple(xs) | Value::Set(xs) => {
+        Value::List(xs) | Value::Set(xs) => {
             return Some(xs.iter().cloned().collect());
         }
         Value::String(s) => return Some(string_chars(s)),
@@ -178,7 +176,7 @@ fn flatten_cons(v: &Value) -> Option<Vec<Value>> {
                 items.push((*head).clone());
                 cur_tail = tail;
             }
-            Value::List(xs) | Value::Tuple(xs) | Value::Set(xs) => {
+            Value::List(xs) | Value::Set(xs) => {
                 items.extend(xs.iter().cloned());
                 return Some(items);
             }
@@ -212,7 +210,7 @@ fn string_chars(s: &str) -> Vec<Value> {
 }
 
 fn pair(k: &Value, v: &Value) -> Value {
-    Value::Tuple(im::vector![k.clone(), v.clone()])
+    Value::List(im::vector![k.clone(), v.clone()])
 }
 
 fn range_elems(start: &Rational, end: &Rational, inclusive: bool) -> Vec<Value> {
@@ -228,7 +226,7 @@ fn range_elems(start: &Rational, end: &Rational, inclusive: bool) -> Vec<Value> 
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Unit => Ok(()),
+            Value::Unit => write!(f, "()"),
             Value::Number(n) => write!(f, "{}", format_rational(n)),
             Value::String(s) => write!(f, "{:?}", s),
             Value::Bool(b) => write!(f, "{}", b),
@@ -242,19 +240,6 @@ impl std::fmt::Display for Value {
                     write!(f, "{}", x)?;
                 }
                 write!(f, "]")
-            }
-            Value::Tuple(xs) => {
-                write!(f, "(")?;
-                for (i, x) in xs.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", x)?;
-                }
-                if xs.len() == 1 {
-                    write!(f, ",")?;
-                }
-                write!(f, ")")
             }
             Value::Dict(es) => {
                 write!(f, "{{")?;
@@ -299,10 +284,10 @@ impl std::fmt::Display for Value {
 }
 
 /// Walk a Cons spine, forcing thunks as we go, then print in the shape of the
-/// terminator. A spine ending in a tuple prints with `(...)`, in a set with
-/// `{...}`, a dict with `{k: v, ...}`, a string with `"..."`, etc. — this is
-/// what makes `take(3, "hello")` display as `"hel"` and `take(2, {"a":1,"b":2})`
-/// as `{"a": 1, "b": 2}`. Infinite ranges show their open-end marker without
+/// terminator. A spine ending in a set prints with `{...}`, in a dict with
+/// `{k: v, ...}`, in a string with `"..."`, etc. — this is what makes
+/// `take(3, "hello")` display as `"hel"` and `take(2, {"a":1,"b":2})` as
+/// `{"a": 1, "b": 2}`. Infinite ranges show their open-end marker without
 /// forcing further; forcing errors surface as `<error: ...>`.
 fn fmt_cons(
     f: &mut std::fmt::Formatter<'_>,
@@ -326,22 +311,6 @@ fn fmt_cons(
     };
 
     match &terminator {
-        Value::Tuple(xs) => {
-            write!(f, "(")?;
-            let total = items.len() + xs.len();
-            let mut first = true;
-            for x in items.iter().chain(xs.iter()) {
-                if !first {
-                    write!(f, ", ")?;
-                }
-                write!(f, "{}", x)?;
-                first = false;
-            }
-            if total == 1 {
-                write!(f, ",")?;
-            }
-            write!(f, ")")
-        }
         Value::Set(xs) => {
             write!(f, "{{")?;
             let mut first = true;
@@ -396,9 +365,8 @@ fn fmt_cons(
 }
 
 fn pair_of(v: &Value) -> Option<(&Value, &Value)> {
-    let xs = match v {
-        Value::Tuple(xs) | Value::List(xs) => xs,
-        _ => return None,
+    let Value::List(xs) = v else {
+        return None;
     };
     if xs.len() != 2 {
         return None;

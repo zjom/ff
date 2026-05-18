@@ -87,7 +87,7 @@ op_paren      = { "(" ~ op_paren_name ~ ")" }
 prefix_op  = _{ neg | logical_not | custom_prefix }
 postfix_op = _{ call_args | dot_access | juxt_arg }
 
-// `list.0` for list/tuple index, `dict.foo` for dict string-key lookup,
+// `list.0` for list index, `dict.foo` for dict string-key lookup,
 // `dict.:foo` for dict atom-key lookup. `dot_index` is digits-only so
 // `xs.0.1` chains as `(xs.0).1` rather than being read as a single decimal index.
 dot_index  = @{ ASCII_DIGIT+ }
@@ -117,11 +117,7 @@ infix_op   = _{
 // Inside `[]`, `{}`, dict/set patterns and pattern-lists, items can be
 // separated by any non-empty run of commas and/or newlines. This makes layouts
 // like `[1,\n 2]`, `[\n 1\n 2\n]`, and `[1,\n  ,2]` all parse the same.
-// Tuples and call-arg lists need at least one literal `,` to disambiguate from
-// `(expr)` / scope / juxtaposition.
 coll_sep  = _{ (NEWLINE | ",")+ }
-// Leading run is NEWLINE-only so the greedy `*` doesn't gobble the required `,`.
-tuple_sep = _{ NEWLINE* ~ "," ~ (NEWLINE | ",")* }
 
 // ----- Patterns -----
 // `..` matches zero-or-more remaining elements; `..name` binds them.
@@ -130,10 +126,8 @@ pattern_item = _{ pattern_rest | pattern }
 
 pattern_list = { "[" ~ coll_sep? ~ (pattern_item ~ (coll_sep ~ pattern_item)* ~ coll_sep?)? ~ "]" }
 
-pattern_tuple = {
-      "(" ~ NEWLINE* ~ ")"
-    | "(" ~ NEWLINE* ~ pattern_item ~ tuple_sep ~ (pattern_item ~ (tuple_sep ~ pattern_item)* ~ tuple_sep?)? ~ NEWLINE* ~ ")"
-}
+// `()` matches the Unit value.
+pattern_unit = { "(" ~ NEWLINE* ~ ")" }
 
 // Dict-pattern entries: full `key: pat` (key is an expression, value a sub-pattern)
 // or shorthand `name`, which desugars to `"name": name` — handy for destructuring
@@ -143,12 +137,12 @@ pattern_dict       = { "{" ~ coll_sep? ~ (pattern_dict_entry ~ (coll_sep ~ patte
 pattern_set        = { "{" ~ coll_sep? ~ pattern ~ (coll_sep ~ pattern)* ~ coll_sep? ~ "}" }
 
 // `wildcard` and `bool` precede `ident` so they aren't shadowed. `op_paren`
-// precedes `pattern_tuple` so `(++)` binds the operator name rather than
-// being attempted as a one-element tuple (which would fail anyway).
+// precedes `pattern_unit` so `(++)` binds the operator name rather than
+// being attempted as the unit pattern.
 pattern_atom = _{
       pattern_list
     | op_paren
-    | pattern_tuple
+    | pattern_unit
     | pattern_dict
     | pattern_set
     | number
@@ -182,10 +176,8 @@ range      = _{ range_incl | range_excl | range_open }
 // ----- Collections (expressions) -----
 list  = { "[" ~ NEWLINE* ~ range ~ NEWLINE* ~ "]"
         | "[" ~ coll_sep? ~ (expr ~ (coll_sep ~ expr)* ~ coll_sep?)? ~ "]" }
-tuple = {
-      "(" ~ NEWLINE* ~ ")"
-    | "(" ~ NEWLINE* ~ expr ~ tuple_sep ~ (expr ~ (tuple_sep ~ expr)* ~ tuple_sep?)? ~ NEWLINE* ~ ")"
-}
+// `()` is the Unit literal.
+unit = { "(" ~ NEWLINE* ~ ")" }
 dict_entry = { expr ~ NEWLINE* ~ ":" ~ NEWLINE* ~ expr }
 dict       = { "{" ~ coll_sep? ~ (dict_entry ~ (coll_sep ~ dict_entry)* ~ coll_sep?)? ~ "}" }
 set        = { "{" ~ coll_sep? ~ expr ~ (coll_sep ~ expr)* ~ coll_sep? ~ "}" }
@@ -194,9 +186,9 @@ set        = { "{" ~ coll_sep? ~ expr ~ (coll_sep ~ expr)* ~ coll_sep? ~ "}" }
 // `( stmts )`. Evaluates statements in order in a child environment that
 // captures the enclosing lexical scope; new bindings are local to the block.
 // The block's value is the value of the last statement (Unit if that statement
-// is an assignment). To disambiguate from tuple / parenthesized-expression, a
-// scope must contain either a single assignment or two-plus statements separated
-// by `;` or newline. `(x)` remains a parenthesized expression; `(x = 1)` is a scope.
+// is an assignment). To disambiguate from a parenthesized expression, a scope
+// must contain either a single assignment or two-plus statements separated by
+// `;` or newline. `(x)` remains a parenthesized expression; `(x = 1)` is a scope.
 scope = {
       "(" ~ stmt_sep? ~ statement ~ (stmt_sep ~ statement)+ ~ stmt_sep? ~ ")"
     | "(" ~ stmt_sep? ~ assignment ~ stmt_sep? ~ ")"
@@ -244,8 +236,8 @@ call_args = { "(" ~ NEWLINE* ~ (expr ~ (NEWLINE* ~ "," ~ NEWLINE* ~ expr)* ~ NEW
 import_expr = { "import" ~ NEWLINE* ~ primary }
 
 // ----- Primary expression -----
-// `scope` precedes `tuple` / `(expr)` so `(x = 1)` and multi-statement blocks
-// bind as blocks rather than failing the tuple/expr rules. `function` is first
+// `scope` precedes `unit` / `(expr)` so `(x = 1)` and multi-statement blocks
+// bind as blocks rather than failing the other paren rules. `function` is first
 // so `(x) => body` is read as a function rather than a parenthesized `x`.
 primary = _{
       function
@@ -261,7 +253,7 @@ primary = _{
     | set
     | op_paren
     | scope
-    | tuple
+    | unit
     | "(" ~ expr ~ ")"
     | ident
 }

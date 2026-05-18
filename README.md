@@ -28,13 +28,15 @@ println(greeting + ", world")
 "abc" + "def"      # "abcdef"
 true && !false     # true
 
-# four collections — lists, tuples, dicts, sets
-[1, 2, 3]
-(1, "two", true)         # heterogeneous, fixed-shape
+# `()` is the unit value
+()
+
+# three collections — lists, dicts, sets. Lists are heterogeneous.
+[1, "two", true]
 {"name": "ada", "age": 36}
 {1, 2, 2, 3}             # {1, 2, 3} — dedup
 
-# `.` indexes lists/tuples by position and dicts by key
+# `.` indexes lists by position and dicts by key
 [10, 20, 30].0           # 10
 {"x": {"y": 7}}.x.y      # 7
 ```
@@ -92,7 +94,7 @@ describe = match
 describe([1, 2, 3])      # "many"
 ```
 
-Cons-patterns peel one element off any sequence — list, tuple, string, or set:
+Cons-patterns peel one element off any sequence — list, string, or set:
 
 ```ff
 sum = match
@@ -107,7 +109,7 @@ the tail:
 
 ```ff
 [head, ..tail] = [1, 2, 3, 4]    # head = 1, tail = [2, 3, 4]
-(x, y)         = (10, 20)
+[x, y]         = [10, 20]
 {"name": who}  = {"name": "ada", "age": 36}
 ```
 
@@ -150,7 +152,7 @@ match map(x => x * 2, [0..])         # infinite range
 ## atoms
 
 `:name` is an atom — a self-evaluating constant that compares equal only to
-itself. Pairs well with tuples and pattern matching for tagged-union style.
+itself. Pairs well with lists and pattern matching for tagged-union style.
 
 ```ff
 :ok                          # :ok
@@ -158,11 +160,11 @@ itself. Pairs well with tuples and pattern matching for tagged-union style.
 :ok == :error                # false
 
 safe_div = (a, b) =>
-  if b == 0 then (:error, "div0") else (:ok, a / b)
+  if b == 0 then [:error, "div0"] else [:ok, a / b]
 
 handle = match
-  (:ok, v)      -> v,
-  (:error, msg) -> -1
+  [:ok, v]      -> v,
+  [:error, msg] -> -1
 
 handle(safe_div(10, 2))      # 5
 handle(safe_div(10, 0))      # -1

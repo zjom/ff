@@ -8,7 +8,7 @@ fn scope_returns_last_expression() {
 
 #[test]
 fn scope_with_single_assignment_returns_unit() {
-    assert_eq!(eval("( x = 1 )"), "");
+    assert_eq!(eval("( x = 1 )"), "()");
 }
 
 #[test]
@@ -99,8 +99,8 @@ fn set_unaffected() {
 }
 
 #[test]
-fn tuple_unaffected() {
-    assert_eq!(eval("(1, 2, 3)"), "(1, 2, 3)");
+fn unit_unaffected() {
+    assert_eq!(eval("()"), "()");
 }
 
 #[test]
@@ -128,7 +128,7 @@ hidden";
 
 #[test]
 fn scope_single_assignment_inline() {
-    assert_eq!(eval("( x = 7 )"), "");
+    assert_eq!(eval("( x = 7 )"), "()");
 }
 
 #[test]

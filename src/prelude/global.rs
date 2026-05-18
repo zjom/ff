@@ -31,11 +31,6 @@ fn cons() -> Value {
                 Ok(Value::String(format!("{}{}", left, right).into()))
             }
 
-            (v, Value::Tuple(mut xs)) => {
-                xs.push_front(v);
-                Ok(Value::Tuple(xs))
-            }
-
             (v, Value::Set(mut xs)) => {
                 if xs.iter().any(|x| &v == x) {
                     Ok(Value::Set(xs))
@@ -44,16 +39,14 @@ fn cons() -> Value {
                     Ok(Value::Set(xs))
                 }
             }
-            (Value::Tuple(kvs) | Value::List(kvs), Value::Dict(mut xs)) => {
+            (Value::List(kvs), Value::Dict(mut xs)) => {
                 if kvs.len() == 2 {
                     let (key, value) = (kvs[0].clone(), kvs[1].clone());
                     xs.retain(|(k, _)| k != &key);
                     xs.push_back((key, value));
                     Ok(Value::Dict(xs))
                 } else {
-                    bail!(
-                        "unsupported operation: can only cons a list or tuple of length 2 with a dict"
-                    )
+                    bail!("unsupported operation: can only cons a 2-element list with a dict")
                 }
             }
 
@@ -70,7 +63,6 @@ fn default() -> Value {
             Value::String(_) => Value::String("".into()),
             Value::Bool(_) => Value::Bool(false),
             Value::List(_) => Value::List(Vector::new()),
-            Value::Tuple(_) => Value::Tuple(Vector::new()),
             Value::Dict(_) => Value::Dict(Vector::new()),
             Value::Set(_) => Value::Set(Vector::new()),
             Value::Range { .. } => Value::Range {

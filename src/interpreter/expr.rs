@@ -156,6 +156,7 @@ fn eval_statement(stmt: &Statement, env: &Env) -> Result<Value> {
 
 pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
     match expr {
+        Expr::Unit => Ok(Value::Unit),
         Expr::Number(n) => Ok(Value::Number(Rc::new(n.clone()))),
         Expr::String(s) => Ok(Value::String(s.as_str().into())),
         Expr::Bool(b) => Ok(Value::Bool(*b)),
@@ -164,12 +165,6 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
             lookup(env, name).ok_or_else(|| anyhow!("undefined variable: {}", name))
         }
         Expr::List(items) => Ok(Value::List(
-            items
-                .iter()
-                .map(|e| eval_expr(e, env))
-                .collect::<Result<_>>()?,
-        )),
-        Expr::Tuple(items) => Ok(Value::Tuple(
             items
                 .iter()
                 .map(|e| eval_expr(e, env))
@@ -275,8 +270,7 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
         Expr::Access { target, key } => {
             let t = eval_expr(target, env)?;
             match (&t, key) {
-                (Value::List(xs), AccessKey::Index(i))
-                | (Value::Tuple(xs), AccessKey::Index(i)) => xs
+                (Value::List(xs), AccessKey::Index(i)) => xs
                     .get(*i)
                     .cloned()
                     .ok_or_else(|| anyhow!("index {} out of range (len {})", i, xs.len())),

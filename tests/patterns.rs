@@ -25,8 +25,8 @@ fn destructure_anonymous_rest() {
 }
 
 #[test]
-fn destructure_tuple() {
-    assert_eq!(eval("(x, y) = (1, 2)\nx + y"), "3");
+fn destructure_unit() {
+    assert_eq!(eval("() = ()\n1"), "1");
 }
 
 #[test]
@@ -113,12 +113,6 @@ fn cons_pattern_list_destructure() {
 }
 
 #[test]
-fn cons_pattern_tuple_destructure() {
-    assert_eq!(eval("h :: t = (10, 20, 30)\nh"), "10");
-    assert_eq!(eval("h :: t = (10, 20, 30)\nt"), "(20, 30)");
-}
-
-#[test]
 fn cons_pattern_string_destructure() {
     assert_eq!(eval(r#"h :: t = "abc"
 h"#), r#""a""#);
@@ -134,10 +128,10 @@ fn cons_pattern_set_destructure() {
 
 #[test]
 fn cons_pattern_dict_destructure() {
-    // Head is the first entry as a (key, value) tuple — the inverse of how
-    // `::` prepends a `(k, v)` tuple onto a dict.
+    // Head is the first entry as a [key, value] list — the inverse of how
+    // `::` prepends a `[k, v]` pair onto a dict.
     assert_eq!(eval(r#"h :: t = {"a": 1, "b": 2}
-h"#), r#"("a", 1)"#);
+h"#), r#"["a", 1]"#);
     assert_eq!(eval(r#"h :: t = {"a": 1, "b": 2}
 t"#), r#"{"b": 2}"#);
 }
@@ -263,8 +257,8 @@ fn match_atom_literal() {
 }
 
 #[test]
-fn match_tagged_tuple() {
-    let src = "result = (:ok, 42)\nmatch result\n  (:ok, v) -> v,\n  (:error, _) -> -1";
+fn match_tagged_pair() {
+    let src = "result = [:ok, 42]\nmatch result\n  [:ok, v] -> v,\n  [:error, _] -> -1";
     assert_eq!(eval(src), "42");
 }
 

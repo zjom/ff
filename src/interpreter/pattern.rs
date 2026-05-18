@@ -32,6 +32,7 @@ fn match_into(
 ) -> Result<bool> {
     match pat {
         Pattern::Wildcard => Ok(true),
+        Pattern::Unit => Ok(matches!(val, Value::Unit)),
         Pattern::Ident(name) => {
             bindings.insert(name.clone(), val.clone());
             Ok(true)
@@ -46,9 +47,8 @@ fn match_into(
                 end,
                 inclusive,
             } => match_seq_range(items, start, end.as_deref(), *inclusive, env, bindings),
-            _ => match_seq(items, val, env, bindings, true),
+            _ => match_seq(items, val, env, bindings),
         },
-        Pattern::Tuple(items) => match_seq(items, val, env, bindings, false),
         Pattern::Dict(entries) => match val {
             Value::Dict(d) => {
                 for (key_expr, sub_pat) in entries {
@@ -101,7 +101,6 @@ fn match_into(
         // type the operator can construct.
         Pattern::Cons { head, tail } => match val {
             Value::List(xs) => match_cons_seq(head, tail, xs, env, bindings, Value::List),
-            Value::Tuple(xs) => match_cons_seq(head, tail, xs, env, bindings, Value::Tuple),
             Value::Set(xs) => match_cons_seq(head, tail, xs, env, bindings, Value::Set),
             Value::String(s) => {
                 let Some(first) = s.chars().next() else {
@@ -118,7 +117,7 @@ fn match_into(
                 let Some((k, v)) = es.front() else {
                     return Ok(false);
                 };
-                let h = Value::Tuple(im::vector![k.clone(), v.clone()]);
+                let h = Value::List(im::vector![k.clone(), v.clone()]);
                 if !match_into(head, &h, env, bindings)? {
                     return Ok(false);
                 }
@@ -261,12 +260,9 @@ fn match_seq(
     val: &Value,
     env: &Env,
     bindings: &mut HashMap<String, Value>,
-    list_like: bool,
 ) -> Result<bool> {
-    let elems = match (list_like, val) {
-        (true, Value::List(xs)) => xs,
-        (false, Value::Tuple(xs)) => xs,
-        _ => return Ok(false),
+    let Value::List(elems) = val else {
+        return Ok(false);
     };
     let rest_idx = items.iter().position(|i| matches!(i, PatternItem::Rest(_)));
     match rest_idx {
@@ -315,12 +311,7 @@ fn match_seq(
             }
             if let PatternItem::Rest(Some(name)) = &items[idx] {
                 let middle = elems.clone().slice(before.len()..after_start);
-                let bound = if list_like {
-                    Value::List(middle)
-                } else {
-                    Value::Tuple(middle)
-                };
-                bindings.insert(name.clone(), bound);
+                bindings.insert(name.clone(), Value::List(middle));
             }
             Ok(true)
         }

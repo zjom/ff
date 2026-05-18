@@ -24,6 +24,7 @@ pub struct Assignment {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
+    Unit,
     Number(rug::Rational),
     String(String),
     Bool(bool),
@@ -31,7 +32,6 @@ pub enum Expr {
     Atom(String),
     Ident(String),
     List(Vec<Expr>),
-    Tuple(Vec<Expr>),
     Dict(Vec<(Expr, Expr)>),
     Set(Vec<Expr>),
     Function {
@@ -83,18 +83,18 @@ pub struct MatchArm {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
     Wildcard,
+    Unit,
     Ident(String),
     Number(rug::Rational),
     String(String),
     Bool(bool),
     Atom(String),
     List(Vec<PatternItem>),
-    Tuple(Vec<PatternItem>),
     Dict(Vec<(Expr, Pattern)>),
     Set(Vec<Pattern>),
     // `head ++ tail`. Type-polymorphic destructuring: splits off the first
-    // element of any value the `++` operator can build (list, string, tuple,
-    // set, dict). Right-associative — `a ++ b ++ rest` nests as `Cons(a, Cons(b, rest))`.
+    // element of any value the `++` operator can build (list, string, set,
+    // dict). Right-associative — `a ++ b ++ rest` nests as `Cons(a, Cons(b, rest))`.
     Cons {
         head: Box<Pattern>,
         tail: Box<Pattern>,

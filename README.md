@@ -1,205 +1,211 @@
 # ff
 
-A small expression-based language with pattern matching, curried functions, and
-destructuring. Implemented in Rust on top of [pest](https://pest.rs).
+> functional ff
 
-## Running
+A small, expression-oriented functional language. Everything is an expression,
+collections are immutable, functions curry, and pattern matching is the main
+control-flow tool. Cons (`::`) is lazy in its tail, so the same `map`/`filter`
+work on infinite streams as on finite lists.
+
+## at a glance
+
+```ff
+# arithmetic is exact-rational; `**` and `^` are power
+1 + 2 * 3          # 7
+2 ** 10            # 1024
+1 / 3 + 1 / 3      # 2/3 — no floating-point drift
+
+# bindings are immutable within a scope; rebinding shadows
+greeting = "hello"
+println(greeting + ", world")
+```
+
+## values
+
+```ff
+# numbers, strings, bools
+42
+"abc" + "def"      # "abcdef"
+true && !false     # true
+
+# four collections — lists, tuples, dicts, sets
+[1, 2, 3]
+(1, "two", true)         # heterogeneous, fixed-shape
+{"name": "ada", "age": 36}
+{1, 2, 2, 3}             # {1, 2, 3} — dedup
+
+# `.` indexes lists/tuples by position and dicts by key
+[10, 20, 30].0           # 10
+{"x": {"y": 7}}.x.y      # 7
+```
+
+Layouts are forgiving: commas and newlines are interchangeable inside `[]`,
+`{}`, and call args.
+
+```ff
+xs = [
+  1
+  2, 3
+  4,
+]
+```
+
+## functions
+
+Functions are values. `=>` builds a lambda; parameters can be comma- or
+space-separated, with or without parens.
+
+```ff
+inc   = x => x + 1
+add   = (x, y) => x + y
+add3  = a b c => a + b + c
+
+inc(5)         # 6
+inc 5          # 6  — juxtaposition is application
+add(3)(4)      # 7  — everything is curried
+add3 1 2 3     # 6
+
+# partial application falls out of currying
+add5 = add(5)
+add5(10)       # 15
+```
+
+The pipe operator `|>` lives in the prelude:
+
+```ff
+[1, 2, 3] |> map(x => x * x) |> reduce((a, b) => a + b, 0)   # 14
+```
+
+## pattern matching
+
+`match` dispatches on shape. The scrutinee is optional — a bare `match` is a
+one-argument function, which is the idiomatic way to define case-analyzing
+functions.
+
+```ff
+describe = match
+  []          -> "empty",
+  [x]         -> "one",
+  [x, y]      -> "two",
+  _           -> "many"
+
+describe([1, 2, 3])      # "many"
+```
+
+Cons-patterns peel one element off any sequence — list, tuple, string, or set:
+
+```ff
+sum = match
+  h :: t -> h + sum(t),
+  _      -> 0
+
+sum([1, 2, 3, 4])        # 10
+```
+
+Destructuring also works in plain assignments, with `..rest` for the middle or
+the tail:
+
+```ff
+[head, ..tail] = [1, 2, 3, 4]    # head = 1, tail = [2, 3, 4]
+(x, y)         = (10, 20)
+{"name": who}  = {"name": "ada", "age": 36}
+```
+
+Guards refine an arm:
+
+```ff
+sign = match
+  n if n < 0 -> "neg",
+  0          -> "zero",
+  _          -> "pos"
+```
+
+## blocks and control flow
+
+Parentheses with multiple statements form a block. The value of the last
+expression is the value of the block; inner bindings don't leak.
+
+```ff
+area = (
+  w = 4
+  h = 5
+  w * h
+)                        # area = 20
+
+abs = n => if n < 0 then -n else n
+```
+
+## laziness and ranges
+
+`[a..b]`, `[a..=b]`, and `[a..]` are lazy ranges. Because `::` doesn't force
+its tail, list combinators stream:
+
+```ff
+match map(x => x * 2, [0..])         # infinite range
+  a :: b :: c :: _ -> [a, b, c]       # [0, 2, 4]
+
+[0..] |> filter(x => x % 2 == 0) |> take 5    # [0, 2, 4, 6, 8]
+```
+
+## option and result
+
+Defined in the prelude as plain tuples — no special syntax:
+
+```ff
+safe_div = (a, b) => if b == 0 then None else Some(a / b)
+
+match safe_div(10, 0)
+  ((),) -> 0,         # None — match literal first
+  (v,)  -> v          # Some — singleton binds anything
+```
+
+## custom operators
+
+Any sequence of operator characters can be a user-defined infix; precedence is
+OCaml-style, picked from the first character (`*`/`/`/`%` bind tighter than
+`+`/`-`, which bind tighter than `=`/`<`/`>`, etc.). Prefix ops start with `?`
+or `~`.
+
+```ff
+(<|>) = (x, y) => if x != default(x) then x else y
+"" <|> "fallback"        # "fallback"
+
+(~?) = x => default(x)
+~?[1, 2, 3]              # []
+```
+
+Wrapping any operator in parens turns it into a normal value:
+
+```ff
+plus = (+)
+[1, 2, 3] |> reduce(plus, 0)    # 6
+```
+
+## modules
+
+`import "path.ff"` returns a module value containing whatever the file marked
+`export`. As a bare statement (not the RHS of `=`), an import also splats those
+names into the current scope.
+
+```ff
+# math.ff
+square = x => x * x
+cube   = x => x * x * x
+export square, cube
+
+# main.ff
+import "math.ff"
+square(7)                # 49
+
+# or keep it namespaced
+M = import "math.ff"
+M.cube(3)                # 27
+```
+
+## running
 
 ```sh
-cargo run        # start the REPL
-```
-
-REPL conventions: `>>` prompts for a new input, `..` for a continuation when the
-buffer doesn't yet parse. A blank line while continuing shows the parse error
-and clears the buffer. Ctrl-D exits.
-
-## Tour
-
-```
-# comments start with `#` and run to end of line
-x = 1 + 2 * 3            # => 7
-greeting = "hello"
-ok = true
-```
-
-### Numbers, strings, booleans
-
-```
-1        2.5        0.0      2**200
-"hi"     "\" not yet supported"
-true     false
-```
-
-numbers are arbitrary precision
-
-Strings are plain text between `"`; there are currently no escape sequences.
-
-### Arithmetic and comparison
-
-| Operators                     | Notes                              |
-|-------------------------------|------------------------------------|
-| `+ - * / %`                   | numbers; `+` also concatenates strings |
-| `** ^`                        | power, right-associative           |
-| `== !=`                       | structural equality on any value   |
-| `< <= > >=`                   | numbers and strings                |
-| `&& \|\|`                     | short-circuiting; require bool operands |
-| `! -`                         | unary not / negate                 |
-| `~  !~`                       | substring containment on strings   |
-
-### Collections
-
-```
-list  = [1, 2, 3]
-tuple = (1, 2)            # () is the empty tuple; (x,) is a 1-tuple
-dict  = {"name": "ada", "age": 36}
-set   = {1, 2, 2, 3}      # deduplicates to {1, 2, 3}
-```
-
-### Dot access
-
-```
-list.0                    # list/tuple index — 1
-dict.name                 # dict string-key lookup — "ada"
-matrix = [[1, 2], [3, 4]]
-matrix.0.1                # chained — 2
-```
-
-`.<digits>` only matches integers, so `xs.0.1` always reads as `(xs.0).1` rather
-than as a single decimal index.
-
-### Functions
-
-Functions are introduced with `(params) => body`. Multi-parameter functions are
-sugar for curried single-parameter functions, and multi-argument calls are sugar
-for chained calls:
-
-```
-add = (x, y) => x + y     # same as (x) => (y) => x + y
-add(3, 4)                 # => 7
-add(3)(4)                 # => 7  — same call
-inc = add(1)              # partial application
-inc(10)                   # => 11
-
-noargs = () => 42         # zero-arg functions are preserved
-noargs()                  # => 42
-```
-
-For one-argument functions, the parens are optional on both sides:
-
-```
-inc = x => x + 1          # same as (x) => x + 1
-inc 5                     # => 6  — same as inc(5)
-add = x => y => x + y     # right-associative arrow; same as (x, y) => x + y
-add 3 4                   # => 7  — same as add(3)(4)
-```
-
-Juxtaposition application binds tighter than any operator: `inc 5 + 2` is
-`(inc 5) + 2`. To pass a negative literal, use parens: `f (-1)` — bare `f -1`
-parses as `f - 1`.
-
-Recursion works because the closure captures a shared handle to the scope it
-was defined in:
-
-```
-fact = (n) => if n == 0 then 1 else n * fact(n - 1)
-fact(6)                   # => 720
-```
-
-### Control flow
-
-```
-if x > 0 then x else -x   # if-then-else is always an expression
-```
-
-`match` evaluates a value against arms separated by commas. First match wins;
-no match raises a runtime error. A trailing comma is allowed.
-
-```
-match value
-  0          -> "zero",
-  1          -> "one",
-  n          -> n * 100   # bare ident binds
-```
-
-An arm can carry an `if` guard that runs after the pattern binds; a false
-guard falls through to the next arm:
-
-```
-match n
-  n if n < 0  -> "neg",
-  0           -> "zero",
-  n if n < 10 -> "small",
-  _           -> "big"
-```
-
-If the scrutinee is omitted, the `match` evaluates to a one-argument function
-whose argument becomes the scrutinee — useful for assigning a matcher to a
-name:
-
-```
-describe = match
-  0          -> "zero",
-  1          -> "one",
-  n          -> "many"
-describe 0                # => "zero"
-describe(42)              # => "many"
-
-fact = match              # recursive match-as-function
-  0 -> 1,
-  n -> n * fact(n - 1)
-fact 6                    # => 720
-```
-
-### Patterns
-
-Patterns appear on the left of `=` (destructuring assignment) and in `match`
-arms. The same forms are accepted in both:
-
-```
-_                         # wildcard, matches anything
-x                         # ident, binds
-42  3.14  "lit"  true     # literal — matches by equality
-
-[a, b, c]                 # list of exactly three
-[a, b, ..rest]            # rest captures remaining as a list
-[head, .., last]          # rest can be in the middle
-[a, b, ..]                # rest without a name discards
-
-(x, y)                    # tuple of two
-{"key": v}                # dict — required keys (extras allowed in value)
-{1, 2}                    # set — each sub-pattern must match some element
-```
-
-Destructuring on assignment:
-
-```
-[first, ..rest] = [10, 20, 30, 40]
-first                     # => 10
-rest                      # => [20, 30, 40]
-
-(x, y) = (1, 2)
-{"name": who} = {"name": "ff", "age": 36}
-who                       # => "ff"
-```
-
-Pattern matching on values:
-
-```
-describe = (xs) -> match xs
-  []          -> "empty",
-  [x]         -> "one element",
-  [x, ..rest] -> "many"
-```
-
-## Project layout
-
-```
-src/
-  ff.pest         # grammar (pest)
-  ast.rs          # AST types
-  parser.rs       # pest → AST, Pratt-parsed expressions, currying desugar
-  interpreter.rs  # tree-walking evaluator
-  repl.rs         # REPL loop
-  main.rs         # binary entry — calls repl::run()
-  lib.rs          # module index
+cargo run                # REPL
+cargo run -- path.ff     # run a file
+cargo test               # run the test suite
 ```

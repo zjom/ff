@@ -575,7 +575,7 @@ fn match_into(
             }
             Ok(true)
         }
-        // `head ++ tail` is the inverse of the `++` operator: peel off the
+        // `head :: tail` is the inverse of the `::` operator: peel off the
         // first element (and rebuild the tail in the same shape) for any value
         // type the operator can construct.
         Pattern::Cons { head, tail } => match val {

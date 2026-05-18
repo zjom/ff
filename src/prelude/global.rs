@@ -73,6 +73,9 @@ fn default() -> Value {
                 end: Some(Rational::new().into()),
                 inclusive: false,
             },
+            // A lazy cons cell behaves like a list view; the natural empty is
+            // just the empty list.
+            Value::Cons { .. } => Value::List(Vector::new()),
             v @ Value::Native { .. } | v @ Value::Function { .. } | v @ Value::Module { .. } => {
                 bail!(
                     "unsupported operation: default is not supported for {},{},{}",

@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 use rug::Rational;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::{BinaryOp, Expr};
@@ -7,9 +8,24 @@ use crate::ast::{BinaryOp, Expr};
 use super::expr::eval_expr;
 use super::number::{rat_mod, rat_pow};
 use super::scope::Env;
-use super::value::{Value, type_name};
+use super::value::{LazyState, Value, type_name};
 
 pub(super) fn eval_binary(op: BinaryOp, lhs: &Expr, rhs: &Expr, env: &Env) -> Result<Value> {
+    // `a :: b` is non-strict in `b`: evaluate the head eagerly and capture the
+    // rhs as a thunk so recursive stdlib builders (e.g. `f(x) :: map(f, rest)`)
+    // don't bottom out before pattern-matching the tail.
+    if matches!(op, BinaryOp::Cons) {
+        let head = eval_expr(lhs, env)?;
+        let tail = Rc::new(RefCell::new(LazyState::Pending {
+            body: rhs.clone(),
+            env: env.clone(),
+        }));
+        return Ok(Value::Cons {
+            head: Rc::new(head),
+            tail,
+        });
+    }
+
     if matches!(op, BinaryOp::And | BinaryOp::Or) {
         let l = eval_expr(lhs, env)?;
         let Value::Bool(lb) = l else {

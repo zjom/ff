@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use crate::ast::{Pattern, PatternItem};
 
-use super::expr::eval_expr;
+use super::expr::{eval_expr, force_tail};
 use super::number::{range_has_elem, rat_succ};
 use super::scope::Env;
 use super::value::Value;
@@ -143,6 +143,21 @@ fn match_into(
                     inclusive: *inclusive,
                 };
                 match_into(tail, &t, env, bindings)
+            }
+            // Force one step of a lazy cons cell. The forced tail becomes the
+            // `rest` binding, so chained `a :: b :: rest` patterns peel
+            // elements off the stream one thunk at a time. A wildcard tail
+            // skips the force — otherwise `h :: _` would diverge on streams
+            // whose tail thunk doesn't terminate.
+            Value::Cons { head: h, tail: t } => {
+                if !match_into(head, h, env, bindings)? {
+                    return Ok(false);
+                }
+                if matches!(**tail, Pattern::Wildcard) {
+                    return Ok(true);
+                }
+                let rest = force_tail(t)?;
+                match_into(tail, &rest, env, bindings)
             }
             _ => Ok(false),
         },

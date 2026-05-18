@@ -254,14 +254,14 @@ fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
                 Rule::logical_or => BinaryOp::Or,
                 Rule::match_op => BinaryOp::Match,
                 Rule::not_match => BinaryOp::NotMatch,
+                Rule::cons_op => BinaryOp::Cons,
                 Rule::custom_op_pow
                 | Rule::custom_op_mult
                 | Rule::custom_op_add
                 | Rule::custom_op_cat
                 | Rule::custom_op_comp
                 | Rule::custom_op_and
-                | Rule::custom_op_or
-                | Rule::cons_op => {
+                | Rule::custom_op_or => {
                     // Curried call: `a OP b` desugars to `(OP)(a)(b)`.
                     let name = Expr::Ident(op.as_str().to_string());
                     return Ok(Expr::Call {

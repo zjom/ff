@@ -134,4 +134,8 @@ pub enum BinaryOp {
     Or,
     Match,
     NotMatch,
+    // `a :: b` — non-strict in `b`. Evaluates lhs eagerly and captures rhs as
+    // a thunk so recursive stdlib builders like `f(x) :: map(f, rest)` don't
+    // force their tail until pattern-matched.
+    Cons,
 }

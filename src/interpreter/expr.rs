@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow, bail};
 use im::Vector;
 use rug::Rational;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::{AccessKey, ExportKind, Expr, Program, Statement, UnaryOp};
@@ -8,7 +9,27 @@ use crate::ast::{AccessKey, ExportKind, Expr, Program, Statement, UnaryOp};
 use super::binop::eval_binary;
 use super::pattern::match_pattern;
 use super::scope::{Env, Scope, ctx_of, define, lookup};
-use super::value::{Value, type_name};
+use super::value::{LazyState, Value, type_name};
+
+/// Force a lazy thunk to a concrete value. Memoizes via the shared RefCell so
+/// re-forcing is cheap. Used by pattern matching, equality, display, and the
+/// `force_cons` helper that walks a stream's spine.
+pub fn force_tail(tail: &Rc<RefCell<LazyState>>) -> Result<Value> {
+    if let LazyState::Forced(v) = &*tail.borrow() {
+        return Ok(v.clone());
+    }
+    let pending = std::mem::replace(&mut *tail.borrow_mut(), LazyState::Forced(Value::Unit));
+    let (body, env) = match pending {
+        LazyState::Pending { body, env } => (body, env),
+        LazyState::Forced(v) => {
+            *tail.borrow_mut() = LazyState::Forced(v.clone());
+            return Ok(v);
+        }
+    };
+    let v = eval_expr(&body, &env)?;
+    *tail.borrow_mut() = LazyState::Forced(v.clone());
+    Ok(v)
+}
 
 pub fn run(program: &Program) -> Result<Value> {
     let env = Scope::new();

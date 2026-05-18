@@ -4,7 +4,6 @@ use anyhow::{Result, anyhow};
 use im::vector;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::rc::Rc;
 
 mod global;
 mod io;

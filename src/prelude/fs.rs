@@ -1,9 +1,9 @@
 use crate::interop::{FfResult, native_fn};
-use crate::prelude::{err, object, ok};
-use std::sync::{Arc, Mutex};
+use crate::prelude::{err_str_tuple, object, ok_tuple};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 use im::Vector;
 use serde::Serialize;
@@ -31,7 +31,7 @@ fn open_file() -> Value {
             });
         };
         if !Path::new(&**path).exists() {
-            err("file not exists");
+            err_str_tuple("file not exists");
         }
         Ok(file_object(path.clone()))
     })
@@ -93,8 +93,8 @@ fn metadata_fn(path: Arc<str>) -> Value {
 fn lines_fn(path: Arc<str>) -> Value {
     native!("file.lines", 0, move |_env, _args| {
         Ok(match File::open(&*path) {
-            Ok(f) => ok(lines_stream(BufReader::new(f))?),
-            Err(e) => err(e.to_string()),
+            Ok(f) => ok_tuple(lines_stream(BufReader::new(f))?),
+            Err(e) => err_str_tuple(e.to_string()),
         })
     })
 }

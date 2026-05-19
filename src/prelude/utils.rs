@@ -1,14 +1,25 @@
 use crate::interpreter::Value;
 use im::{HashMap, vector};
 use std::sync::Arc;
-pub(super) fn ok(v: Value) -> Value {
+pub(super) fn ok_tuple(v: Value) -> Value {
     Value::List(vector![Value::Atom("ok".into()), v])
 }
 
-pub(super) fn err(msg: impl Into<Arc<str>>) -> Value {
+/// constructs a len 2 list: `[:error, msg]` where msg is String
+pub(super) fn err_str_tuple(msg: impl Into<Arc<str>>) -> Value {
     Value::List(vector![
         Value::Atom("error".into()),
         Value::String(msg.into())
+    ])
+}
+
+// `[:error, :tag]` — distinct from the string-bearing `err` helper so
+// reasons like `:no_proc` stay matchable as atoms.
+pub(super) fn err_atom_tuple(tag: &str) -> Value {
+    let trimmed = tag.strip_prefix(':').unwrap_or(tag);
+    Value::List(vector![
+        Value::Atom("error".into()),
+        Value::Atom(trimmed.into()),
     ])
 }
 
@@ -27,7 +38,7 @@ macro_rules! members {
             vec![$(
                 (
                     stringify!($name),
-                    native_fn(concat!($module, ".", stringify!($name)), $body),
+                    crate::interop::native_fn(concat!($module, ".", stringify!($name)), $body),
                 ),
             )*]
         }

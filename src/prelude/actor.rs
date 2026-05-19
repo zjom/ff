@@ -1,9 +1,7 @@
-use im::vector;
-use std::sync::Arc;
-
 use crate::interpreter::runtime::{self, Pid, RequestReply};
 use crate::interpreter::{RuntimeError, Value, type_name};
 use crate::native;
+use crate::prelude::{err_atom_tuple, err_str_tuple, ok_tuple};
 
 pub fn members() -> Vec<(&'static str, Value)> {
     vec![
@@ -17,35 +15,14 @@ pub fn members() -> Vec<(&'static str, Value)> {
     ]
 }
 
-fn ok_atom_or_value(v: Value) -> Value {
-    Value::List(vector![Value::Atom("ok".into()), v])
-}
-
-// `[:error, :tag]` — distinct from the string-bearing `err` helper so
-// reasons like `:no_proc` stay matchable as atoms.
-fn err_atom(tag: &str) -> Value {
-    let trimmed = tag.strip_prefix(':').unwrap_or(tag);
-    Value::List(vector![
-        Value::Atom("error".into()),
-        Value::Atom(trimmed.into()),
-    ])
-}
-
-fn err_msg(msg: impl Into<Arc<str>>) -> Value {
-    Value::List(vector![
-        Value::Atom("error".into()),
-        Value::String(msg.into()),
-    ])
-}
-
 fn request_reply_to_value(reply: RequestReply) -> Value {
     match reply {
-        RequestReply::Ok(v) => ok_atom_or_value(v),
+        RequestReply::Ok(v) => ok_tuple(v),
         RequestReply::Err(s) => {
             if s.starts_with(':') {
-                err_atom(&s)
+                err_atom_tuple(&s)
             } else {
-                err_msg(s)
+                err_str_tuple(s)
             }
         }
     }
@@ -66,8 +43,8 @@ fn expect_pid(native: &'static str, v: &Value) -> Result<Pid, RuntimeError> {
 fn spawn() -> Value {
     native!("Actor.spawn", 1, |env, args| {
         match runtime::spawn(env, args[0].clone()) {
-            Ok(pid) => Ok(ok_atom_or_value(pid)),
-            Err(e) => Ok(err_msg(e.to_string())),
+            Ok(pid) => Ok(ok_tuple(pid)),
+            Err(e) => Ok(err_str_tuple(e.to_string())),
         }
     })
 }
@@ -91,8 +68,8 @@ fn request() -> Value {
 fn self_() -> Value {
     native!("Actor.self", 0, |env, _args| {
         Ok(match runtime::current_pid(env) {
-            Some(pid) => ok_atom_or_value(Value::Pid(pid)),
-            None => err_atom(":not_in_actor"),
+            Some(pid) => ok_tuple(Value::Pid(pid)),
+            None => err_atom_tuple(":not_in_actor"),
         })
     })
 }

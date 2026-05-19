@@ -8,6 +8,7 @@ mod actor;
 mod env;
 mod fs;
 mod global;
+mod io;
 mod object;
 mod utils;
 use utils::*;
@@ -66,6 +67,7 @@ fn native_module(name: &str) -> Option<Value> {
         "Object" => object::members(),
         "Env" => env::members(),
         "Actor" => actor::members(),
+        "Io" => io::members(),
         _ => return None,
     };
     Some(object(members.into_iter().map(|(k, v)| (k.to_string(), v))))

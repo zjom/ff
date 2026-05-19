@@ -1,5 +1,5 @@
 use crate::ast::Program;
-use crate::interpreter::{Env, Scope, Value, eval_program};
+use crate::interpreter::{Env, Scope, eval_program};
 use crate::parser::parse;
 use rustyline::error::ReadlineError;
 use rustyline::history::FileHistory;

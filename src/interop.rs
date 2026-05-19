@@ -10,9 +10,44 @@ use std::rc::Rc;
 use rug::{Integer, Rational};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::ser::{SerializeSeq, Serializer};
 use serde_json::{Number as JsonNumber, Value as Json};
 
 use crate::interpreter::{Env, NativeFn, RuntimeError, RuntimeResult, Value, define};
+
+/// ff's tagged result convention: `[:ok, t]` / `[:error, msg]`. Serializes
+/// directly to that shape, so natives can return `FfResult<T>` (or just
+/// `.into()` a `Result<T, E>`) and stay idiomatic Rust.
+pub enum FfResult<T> {
+    Ok(T),
+    Err(String),
+}
+
+impl<T: Serialize> Serialize for FfResult<T> {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut seq = s.serialize_seq(Some(2))?;
+        match self {
+            FfResult::Ok(v) => {
+                seq.serialize_element(":ok")?;
+                seq.serialize_element(v)?;
+            }
+            FfResult::Err(msg) => {
+                seq.serialize_element(":error")?;
+                seq.serialize_element(msg)?;
+            }
+        }
+        seq.end()
+    }
+}
+
+impl<T, E: std::fmt::Display> From<Result<T, E>> for FfResult<T> {
+    fn from(r: Result<T, E>) -> Self {
+        match r {
+            Ok(v) => FfResult::Ok(v),
+            Err(e) => FfResult::Err(e.to_string()),
+        }
+    }
+}
 
 pub fn to_value<T: Serialize + ?Sized>(t: &T) -> RuntimeResult<Value> {
     let json = serde_json::to_value(t).map_err(|e| RuntimeError::Serialize(e.to_string()))?;

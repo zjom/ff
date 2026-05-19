@@ -137,10 +137,10 @@ fn build_pattern(pair: Pair<Rule>) -> Result<Pattern> {
                 let first = inner.next().ok_or_else(|| anyhow!("empty object entry"))?;
                 match first.as_rule() {
                     Rule::ident => {
-                        // `{name}` shorthand desugars to `{"name": name}` —
+                        // `{name}` shorthand desugars to `{:name: name}` —
                         // binds the matched value under the same identifier.
                         let name = first.as_str().to_string();
-                        entries.push((Expr::String(name.clone()), Pattern::Ident(name)));
+                        entries.push((Expr::Atom(name.clone()), Pattern::Ident(name)));
                     }
                     Rule::expr => {
                         let key = build_expr(first)?;

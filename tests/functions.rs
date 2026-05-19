@@ -174,7 +174,7 @@ fn param_object_shorthand() {
     assert_eq!(
         eval(
             r#"f = {name} => name
-f({"name": "ada"})"#
+f({:name: "ada"})"#
         ),
         r#""ada""#
     );

@@ -142,3 +142,10 @@ fn option_some_and_none() {
         none
     );
 }
+
+#[test]
+fn atom_round_trim() {
+    let v = to_value(":atom").unwrap();
+    let back: String = from_value(v).unwrap();
+    assert_eq!(back, ":atom");
+}

@@ -385,6 +385,7 @@ fn value_to_json(v: Value) -> RuntimeResult<Json> {
         Value::Function { .. } | Value::Native { .. } => {
             return Err(RuntimeError::FunctionDeserialize);
         }
+        Value::Pid(_) => return Err(RuntimeError::PidDeserialize),
     })
 }
 

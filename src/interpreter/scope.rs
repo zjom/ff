@@ -4,6 +4,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use super::runtime::Runtime;
 use super::value::Value;
 
 pub struct Ctx {
@@ -11,6 +12,7 @@ pub struct Ctx {
     pub current_file: RefCell<Option<PathBuf>>,
     pub current_exports: RefCell<Option<Vec<(String, Value)>>>,
     pub is_interactive: bool,
+    pub runtime: RefCell<Runtime>,
 }
 
 impl Ctx {
@@ -20,6 +22,7 @@ impl Ctx {
             current_file: RefCell::new(None),
             current_exports: RefCell::new(None),
             is_interactive: true,
+            runtime: RefCell::new(Runtime::new()),
         })
     }
 
@@ -29,6 +32,7 @@ impl Ctx {
             current_file: RefCell::new(Some(path)),
             current_exports: RefCell::new(None),
             is_interactive: false,
+            runtime: RefCell::new(Runtime::new()),
         })
     }
 }

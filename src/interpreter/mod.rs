@@ -3,6 +3,7 @@ mod error;
 mod expr;
 mod number;
 mod pattern;
+pub mod runtime;
 mod scope;
 mod value;
 

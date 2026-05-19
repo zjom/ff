@@ -71,6 +71,10 @@ pub enum Value {
         applied: Vec<Value>,
         f: NativeFn,
     },
+    // Process identifier minted by the actor runtime. Opaque from ff — the
+    // engine is the only thing that can construct one, so a Pid in scope is a
+    // claim that an actor exists (or once existed) with that id.
+    Pid(u64),
 }
 
 pub type NativeFunction = Rc<dyn Fn(&Env, &[Value]) -> RuntimeResult<Value>>;
@@ -98,6 +102,7 @@ pub fn type_name(v: &Value) -> &'static str {
         Value::Cons { .. } => "cons",
         Value::Function { .. } => "function",
         Value::Native { .. } => "native",
+        Value::Pid(_) => "pid",
     }
 }
 
@@ -119,6 +124,7 @@ fn value_eq(a: &Value, b: &Value) -> bool {
         (Value::String(x), Value::String(y)) => x == y,
         (Value::Bool(x), Value::Bool(y)) => x == y,
         (Value::Atom(x), Value::Atom(y)) => x == y,
+        (Value::Pid(x), Value::Pid(y)) => x == y,
         (Value::List(x), Value::List(y)) => {
             x.len() == y.len() && x.iter().zip(y).all(|(a, b)| value_eq(a, b))
         }
@@ -218,6 +224,7 @@ impl Hash for Value {
             // a best-effort placeholder; using them as keys is unsupported.
             Value::Function { .. } => {}
             Value::Native { name, .. } => name.hash(state),
+            Value::Pid(id) => id.hash(state),
         }
     }
 }
@@ -372,6 +379,7 @@ impl std::fmt::Display for Value {
                     .join(", ")
             ),
             Value::Native { name, .. } => write!(f, "<native {}>", name),
+            Value::Pid(id) => write!(f, "#PID<{}>", id),
         }
     }
 }

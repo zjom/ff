@@ -293,6 +293,49 @@ M.cube(3)                # 27
 ```
 
 
+## actors
+
+`import "Actor"` exposes an Erlang/Elixir-style actor runtime. An actor is just
+an object with atom-keyed callbacks: `:init`, `:handle_call`, `:handle_cast`.
+Each actor processes its mailbox strictly in order; concurrency comes from
+interleaving many actors.
+
+```ff
+Actor = import "Actor"
+
+handle_call = (msg, n) => match msg
+  :get -> [n, n]                       # [reply, new_state]
+handle_cast = (msg, n) => match msg
+  [:add, x] -> n + x,                  # new_state only
+  :reset -> 0
+
+counter = {
+  :init: () => 0
+  :handle_call: handle_call
+  :handle_cast: handle_cast
+}
+
+[:ok, pid] = Actor.spawn(counter)
+Actor.cast(pid, [:add, 5])             # fire-and-forget
+Actor.cast(pid, [:add, 7])
+Actor.call(pid, :get)                  # [:ok, 12]
+```
+
+Primitives: `Actor.spawn`, `Actor.cast`, `Actor.call`, `Actor.self`,
+`Actor.alive`, `Actor.stop`, `Actor.run_until_idle`. `cast` returns `()`
+immediately; `call` blocks the calling actor (or top-level code) until the
+target replies. Synchronous `call` cycles are detected and surface as
+`[:error, :self_deadlock]` or `[:error, :deadlock]` rather than recursing
+forever; calls to a dead or unknown pid return `[:error, :no_proc]`. A handler
+that raises kills its actor and surfaces a `[:error, "handler crashed: ..."]`
+to the caller without aborting the script.
+
+The scheduler is cooperative and single-threaded — actors don't run in
+parallel. Each `cast`/`call` drains the ready queue before returning; if you
+spawn actors and exit without further messaging them, end the script with
+`Actor.run_until_idle()` to flush remaining mail.
+
+
 ## working with rust
 
 ```rust

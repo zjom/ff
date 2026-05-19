@@ -4,6 +4,7 @@ use crate::interpreter::{
 use crate::parser::parse;
 use std::path::PathBuf;
 
+mod actor;
 mod env;
 mod fs;
 mod global;
@@ -64,6 +65,7 @@ fn native_module(name: &str) -> Option<Value> {
         "Fs" => fs::members(),
         "Object" => object::members(),
         "Env" => env::members(),
+        "Actor" => actor::members(),
         _ => return None,
     };
     Some(object(members.into_iter().map(|(k, v)| (k.to_string(), v))))

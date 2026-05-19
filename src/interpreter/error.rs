@@ -158,6 +158,9 @@ pub enum RuntimeError {
     #[error("cannot deserialize a Function")]
     FunctionDeserialize,
 
+    #[error("cannot deserialize a Pid")]
+    PidDeserialize,
+
     #[error("cannot represent {0} as a float")]
     CannotRepresentAsFloat(String),
 }

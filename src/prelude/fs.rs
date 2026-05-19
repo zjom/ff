@@ -1,7 +1,7 @@
 use crate::interop::{FfResult, native_fn};
 use crate::prelude::{err_str_tuple, object, ok_tuple};
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Bytes, Read, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -42,8 +42,9 @@ fn file_object(path: Arc<str>) -> Value {
         ("path", Value::String(path.clone())),
         ("write", write_fn(path.clone())),
         ("append", append_fn(path.clone())),
-        ("read", read_fn(path.clone())),
+        ("read_all", read_fn(path.clone())),
         ("lines", lines_fn(path.clone())),
+        ("bytes", bytes_fn(path.clone())),
         ("metadata", metadata_fn(path)),
     ];
     object(entries)
@@ -51,13 +52,13 @@ fn file_object(path: Arc<str>) -> Value {
 
 fn write_fn(path: Arc<str>) -> Value {
     native_fn("file.write", move |data: String| -> FfResult<()> {
-        fs::write(&*path, &data).into()
+        std::fs::write(&*path, &data).into()
     })
 }
 
 fn append_fn(path: Arc<str>) -> Value {
     native_fn("file.append", move |data: String| -> FfResult<()> {
-        fs::OpenOptions::new()
+        std::fs::OpenOptions::new()
             .append(true)
             .open(&*path)
             .and_then(|mut f| f.write_all(data.as_bytes()))
@@ -66,9 +67,39 @@ fn append_fn(path: Arc<str>) -> Value {
 }
 
 fn read_fn(path: Arc<str>) -> Value {
-    native_fn("file.read", move || -> FfResult<String> {
-        fs::read_to_string(&*path).into()
+    native_fn("file.read_all", move || -> FfResult<String> {
+        std::fs::read_to_string(&*path).into()
     })
+}
+
+fn bytes_fn(path: Arc<str>) -> Value {
+    native!("file.bytes", 0, move |_env, _args| {
+        Ok(match File::open(&*path) {
+            Ok(f) => {
+                let reader = BufReader::new(f);
+                ok_tuple(bytes_stream(reader.bytes())?)
+            }
+            Err(e) => err_str_tuple(e.to_string()),
+        })
+    })
+}
+
+fn bytes_stream(mut bytes: Bytes<BufReader<File>>) -> RuntimeResult<Value> {
+    match bytes.next() {
+        Some(res) => match res {
+            Ok(p) => {
+                let tail = Arc::new(Mutex::new(LazyState::Native(Box::new(move || {
+                    bytes_stream(bytes)
+                }))));
+                Ok(Value::Cons {
+                    head: Arc::new(ok_tuple(Value::Number(Arc::new(p.into())))),
+                    tail,
+                })
+            }
+            Err(e) => Ok(err_str_tuple(e.to_string())),
+        },
+        None => Ok(Value::List(Vector::new())),
+    }
 }
 
 #[derive(Serialize)]
@@ -113,11 +144,11 @@ fn lines_stream(mut reader: BufReader<File>) -> RuntimeResult<Value> {
                 lines_stream(reader)
             }))));
             Ok(Value::Cons {
-                head: Arc::new(Value::String(buf.into())),
+                head: Arc::new(ok_tuple(Value::String(buf.into()))),
                 tail,
             })
         }
-        Err(e) => Err(RuntimeError::Io(e)),
+        Err(e) => Ok(err_str_tuple(e.to_string())),
     }
 }
 

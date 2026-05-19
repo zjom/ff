@@ -27,6 +27,12 @@ fold = (f, acc, xs) => match xs
   y :: rest -> f(y, fold(f, acc, rest)),
   _ -> acc
 
-assert = val => if val != default(val) then val else panic "assert failed"
+assert = args => (
+  [val, msg] = match args
+    [val,msg] -> [val,msg],
+    val -> [val, "assert failed"]
+
+  if val != default(val) then val else panic msg
+  )
 
 export (|>), (<<), (>>), map, filter, take, rev, reduce, fold, assert

@@ -37,4 +37,6 @@ assert = args => (
   else panic msg
 )
 
-export (|>), (<<), (>>), map, filter, take, rev, reduce, fold, assert
+Object = import "Object"
+
+export (|>), (<<), (>>), map, filter, take, rev, reduce, fold, assert, Object

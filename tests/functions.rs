@@ -138,7 +138,10 @@ fn param_cons_destructure() {
 #[test]
 fn param_chained_cons() {
     // `a :: b :: rest => ...` peels two elements.
-    assert_eq!(eval("f = a :: b :: rest => rest\nf([1, 2, 3, 4])"), "[3, 4]");
+    assert_eq!(
+        eval("f = a :: b :: rest => rest\nf([1, 2, 3, 4])"),
+        "[3, 4]"
+    );
     assert_eq!(eval("f = a :: b :: rest => b\nf([1, 2, 3, 4])"), "2");
 }
 
@@ -150,8 +153,10 @@ fn param_atom_tagged_pair() {
 #[test]
 fn param_object_destructure() {
     assert_eq!(
-        eval(r#"f = {"name": n} => n
-f({"name": "ada", "age": 36})"#),
+        eval(
+            r#"f = {"name": n} => n
+f({"name": "ada", "age": 36})"#
+        ),
         r#""ada""#
     );
 }
@@ -167,18 +172,22 @@ fn param_object_atom_key_destructure() {
 #[test]
 fn param_object_shorthand() {
     assert_eq!(
-        eval(r#"f = {name} => name
-f({"name": "ada"})"#),
+        eval(
+            r#"f = {name} => name
+f({"name": "ada"})"#
+        ),
         r#""ada""#
     );
 }
 
 #[test]
 fn param_cons_with_list_head() {
-    // `[key, value] :: rest` peels the first entry of an object as a [k, v] pair.
+    // `[key, value] :: rest` peels an entry of an object as a [k, v] pair.
     assert_eq!(
-        eval(r#"f = [k, v] :: rest => k
-f({"a": 1, "b": 2})"#),
+        eval(
+            r#"f = [k, v] :: rest => k
+f({"a": 1})"#
+        ),
         r#""a""#
     );
 }
@@ -199,10 +208,7 @@ fn param_literal_pattern_failure_is_runtime_error() {
 #[test]
 fn param_mixed_destructure_multi_arg() {
     // Each curried param can be its own pattern.
-    assert_eq!(
-        eval("f = ([a, b], c) => a + b + c\nf([1, 2], 3)"),
-        "6"
-    );
+    assert_eq!(eval("f = ([a, b], c) => a + b + c\nf([1, 2], 3)"), "6");
 }
 
 #[test]

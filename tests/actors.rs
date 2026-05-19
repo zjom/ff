@@ -17,119 +17,119 @@ fn counter_sanity() {
     let src = r#"
 Actor = import "Actor"
 
-handle_call = (msg, n) => match msg
+handle_request = (msg, n) => match msg
   :get -> [n, n]
-handle_cast = (msg, n) => match msg
+handle_notify = (msg, n) => match msg
   [:add, x] -> n + x,
   :reset -> 0
 
 counter = {
   :init: () => 10
-  :handle_call: handle_call
-  :handle_cast: handle_cast
+  :handle_request: handle_request
+  :handle_notify: handle_notify
 }
 
 [:ok, pid] = Actor.spawn(counter)
-Actor.cast(pid, [:add, 5])
-Actor.cast(pid, [:add, 7])
-Actor.call(pid, :get)
+Actor.notify(pid, [:add, 5])
+Actor.notify(pid, [:add, 7])
+Actor.request(pid, :get)
 "#;
     assert_eq!(eval(src), "[:ok, 22]");
 }
 
 #[test]
-fn cast_then_call_in_order() {
-    // Each cast appends its arg to a list; final call returns the list.
+fn notify_then_request_in_order() {
+    // Each notify appends its arg to a list; final request returns the list.
     // Verifies strict per-actor FIFO message processing.
     let src = r#"
 Actor = import "Actor"
 
-handle_call = (msg, state) => match msg
+handle_request = (msg, state) => match msg
   :get -> [state, state]
-handle_cast = (msg, state) => match msg
+handle_notify = (msg, state) => match msg
   [:push, x] -> x :: state
 
 logger = {
   :init: () => []
-  :handle_call: handle_call
-  :handle_cast: handle_cast
+  :handle_request: handle_request
+  :handle_notify: handle_notify
 }
 
 [:ok, pid] = Actor.spawn(logger)
-Actor.cast(pid, [:push, 1])
-Actor.cast(pid, [:push, 2])
-Actor.cast(pid, [:push, 3])
-[:ok, result] = Actor.call(pid, :get)
+Actor.notify(pid, [:push, 1])
+Actor.notify(pid, [:push, 2])
+Actor.notify(pid, [:push, 3])
+[:ok, result] = Actor.request(pid, :get)
 result
 "#;
     assert_eq!(eval(src), "[3, 2, 1]");
 }
 
 #[test]
-fn nested_call_across_actors() {
+fn nested_request_across_actors() {
     // A.relay forwards a ping to B and returns B's reply unchanged.
-    // Verifies that a call from inside a handler nests properly.
+    // Verifies that a request from inside a handler nests properly.
     let src = r#"
 Actor = import "Actor"
 
-b_call = (msg, s) => match msg
+b_request = (msg, s) => match msg
   :ping -> [:pong, s]
-b = {:init: () => (), :handle_call: b_call}
+b = {:init: () => (), :handle_request: b_request}
 [:ok, b_pid] = Actor.spawn(b)
 
-a_call = (msg, s) => match msg
+a_request = (msg, s) => match msg
   [:relay, target] -> (
-    [:ok, reply] = Actor.call(target, :ping)
+    [:ok, reply] = Actor.request(target, :ping)
     [reply, s]
   )
-a = {:init: () => (), :handle_call: a_call}
+a = {:init: () => (), :handle_request: a_request}
 [:ok, a_pid] = Actor.spawn(a)
 
-Actor.call(a_pid, [:relay, b_pid])
+Actor.request(a_pid, [:relay, b_pid])
 "#;
     assert_eq!(eval(src), "[:ok, :pong]");
 }
 
 #[test]
-fn self_call_is_deadlock() {
+fn self_request_is_deadlock() {
     let src = r#"
 Actor = import "Actor"
 
-call_handler = (msg, s) => match msg
+request_handler = (msg, s) => match msg
   :try_self -> (
     [:ok, me] = Actor.self()
-    result = Actor.call(me, :ping)
+    result = Actor.request(me, :ping)
     [result, s]
   ),
   :ping -> [:pong, s]
 
-actor = {:init: () => (), :handle_call: call_handler}
+actor = {:init: () => (), :handle_request: request_handler}
 [:ok, pid] = Actor.spawn(actor)
-Actor.call(pid, :try_self)
+Actor.request(pid, :try_self)
 "#;
     assert_eq!(eval(src), "[:ok, [:error, :self_deadlock]]");
 }
 
 #[test]
-fn call_dead_pid_returns_no_proc() {
+fn request_dead_pid_returns_no_proc() {
     let src = r#"
 Actor = import "Actor"
-actor = {:init: () => (), :handle_call: (msg, s) => [:ok, s]}
+actor = {:init: () => (), :handle_request: (msg, s) => [:ok, s]}
 [:ok, pid] = Actor.spawn(actor)
 Actor.stop(pid)
-Actor.call(pid, :hi)
+Actor.request(pid, :hi)
 "#;
     assert_eq!(eval(src), "[:error, :no_proc]");
 }
 
 #[test]
-fn cast_to_dead_pid_drops_silently() {
+fn notify_to_dead_pid_drops_silently() {
     let src = r#"
 Actor = import "Actor"
-actor = {:init: () => (), :handle_call: (msg, s) => [:ok, s]}
+actor = {:init: () => (), :handle_request: (msg, s) => [:ok, s]}
 [:ok, pid] = Actor.spawn(actor)
 Actor.stop(pid)
-Actor.cast(pid, :anything)
+Actor.notify(pid, :anything)
 "#;
     assert_eq!(eval(src), "()");
 }
@@ -139,13 +139,13 @@ fn handler_crash_returns_error_and_kills_actor() {
     let src = r#"
 Actor = import "Actor"
 
-call_handler = (msg, s) => match msg
+request_handler = (msg, s) => match msg
   :crash -> [1 / 0, s],
   :ping -> [:pong, s]
 
-actor = {:init: () => (), :handle_call: call_handler}
+actor = {:init: () => (), :handle_request: request_handler}
 [:ok, pid] = Actor.spawn(actor)
-[:error, _] = Actor.call(pid, :crash)
+[:error, _] = Actor.request(pid, :crash)
 Actor.alive(pid)
 "#;
     assert_eq!(eval(src), "false");
@@ -173,15 +173,15 @@ actor = {:init: () => ()}
 }
 
 #[test]
-fn missing_call_handler() {
+fn missing_request_handler() {
     let src = r#"
 Actor = import "Actor"
 actor = {:init: () => ()}
 [:ok, pid] = Actor.spawn(actor)
-Actor.call(pid, :anything)
+Actor.request(pid, :anything)
 "#;
     // The handler-absent path surfaces as [:error, "..."] with a string
-    // body (handler-crashed shape) rather than a clean :no_call_handler atom;
+    // body (handler-crashed shape) rather than a clean :no_request_handler atom;
     // that's documented in the runtime and acceptable for v1.
     let result = eval(src);
     assert!(

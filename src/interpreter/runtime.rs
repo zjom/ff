@@ -2,8 +2,8 @@
 //!
 //! Each `Actor.spawn` parks an actor on its own `tokio::task::spawn_blocking`
 //! task. The actor's mailbox is an `mpsc::UnboundedSender`; messages drive a
-//! synchronous loop that invokes `:handle_call` / `:handle_cast` callbacks via
-//! [`apply`]. `Actor.call` synchronously waits on a `oneshot::Receiver` for
+//! synchronous loop that invokes `:handle_request` / `:handle_notify` callbacks via
+//! [`apply`]. `Actor.request` synchronously waits on a `oneshot::Receiver` for
 //! the reply.
 //!
 //! Unlike the previous cooperative-single-threaded scheduler, this runtime is
@@ -11,7 +11,7 @@
 //! tokio's blocking pool. Per-actor message ordering is still strict (one
 //! handler at a time per actor).
 //!
-//! Self-deadlock detection: `Actor.call(self, _)` from inside a handler is
+//! Self-deadlock detection: `Actor.request(self, _)` from inside a handler is
 //! recognised via a thread-local current pid and rejected with
 //! `[:error, :self_deadlock]` rather than blocking the handler thread
 //! forever.
@@ -32,16 +32,16 @@ use super::value::{Value, type_name};
 pub type Pid = u64;
 
 pub enum ActorMsg {
-    Cast(Value),
-    Call {
+    Notify(Value),
+    Request {
         msg: Value,
-        reply: oneshot::Sender<CallReply>,
+        reply: oneshot::Sender<RequestReply>,
     },
     Stop,
 }
 
 #[derive(Debug)]
-pub enum CallReply {
+pub enum RequestReply {
     Ok(Value),
     Err(Arc<str>),
 }
@@ -186,29 +186,30 @@ pub fn spawn(env: &Env, template: Value) -> RuntimeResult<Value> {
                 break;
             }
             match msg {
-                ActorMsg::Cast(m) => match invoke_cast(&env_for_task, &template_for_task, m, state.clone()) {
-                    Ok(new_state) => state = new_state,
-                    Err(e) => {
-                        let _ = writeln!(
-                            ctx_for_task.out.lock().unwrap(),
-                            "[actor #PID<{}> crashed: {}]",
-                            pid,
-                            e
-                        );
-                        alive.store(false, Ordering::SeqCst);
-                        break;
+                ActorMsg::Notify(m) => {
+                    match invoke_notify(&env_for_task, &template_for_task, m, state.clone()) {
+                        Ok(new_state) => state = new_state,
+                        Err(e) => {
+                            let _ = writeln!(
+                                ctx_for_task.out.lock().unwrap(),
+                                "[actor #PID<{}> crashed: {}]",
+                                pid,
+                                e
+                            );
+                            alive.store(false, Ordering::SeqCst);
+                            break;
+                        }
                     }
-                },
-                ActorMsg::Call { msg: m, reply } => {
-                    match invoke_call(&env_for_task, &template_for_task, m, state.clone()) {
+                }
+                ActorMsg::Request { msg: m, reply } => {
+                    match invoke_request(&env_for_task, &template_for_task, m, state.clone()) {
                         Ok((reply_val, new_state)) => {
                             state = new_state;
-                            let _ = reply.send(CallReply::Ok(reply_val));
+                            let _ = reply.send(RequestReply::Ok(reply_val));
                         }
                         Err(e) => {
-                            let _ = reply.send(CallReply::Err(
-                                format!("handler crashed: {}", e).into(),
-                            ));
+                            let _ = reply
+                                .send(RequestReply::Err(format!("handler crashed: {}", e).into()));
                             alive.store(false, Ordering::SeqCst);
                             break;
                         }
@@ -220,7 +221,7 @@ pub fn spawn(env: &Env, template: Value) -> RuntimeResult<Value> {
                 }
             }
         }
-        // Remove the actor handle so future `call`s see :no_proc.
+        // Remove the actor handle so future `request`s see :no_proc.
         if let Ok(mut map) = actors_for_task.lock() {
             map.remove(&pid);
         }
@@ -230,7 +231,7 @@ pub fn spawn(env: &Env, template: Value) -> RuntimeResult<Value> {
     Ok(Value::Pid(pid))
 }
 
-pub fn cast(env: &Env, pid: Pid, msg: Value) {
+pub fn notify(env: &Env, pid: Pid, msg: Value) {
     let (actors, _) = runtime_snapshot(env);
     let Some(handle) = lookup_actor(&actors, pid) else {
         return;
@@ -238,35 +239,35 @@ pub fn cast(env: &Env, pid: Pid, msg: Value) {
     if !handle.alive.load(Ordering::SeqCst) {
         return;
     }
-    let _ = handle.sender.send(ActorMsg::Cast(msg));
+    let _ = handle.sender.send(ActorMsg::Notify(msg));
 }
 
-pub fn call(env: &Env, pid: Pid, msg: Value) -> CallReply {
+pub fn request(env: &Env, pid: Pid, msg: Value) -> RequestReply {
     if CURRENT_PID.with(|c| c.get()) == Some(pid) {
-        return CallReply::Err(":self_deadlock".into());
+        return RequestReply::Err(":self_deadlock".into());
     }
     let (actors, _) = runtime_snapshot(env);
     let Some(handle) = lookup_actor(&actors, pid) else {
-        return CallReply::Err(":no_proc".into());
+        return RequestReply::Err(":no_proc".into());
     };
     if !handle.alive.load(Ordering::SeqCst) {
-        return CallReply::Err(":no_proc".into());
+        return RequestReply::Err(":no_proc".into());
     }
 
     let (reply_tx, reply_rx) = oneshot::channel();
     if handle
         .sender
-        .send(ActorMsg::Call {
+        .send(ActorMsg::Request {
             msg,
             reply: reply_tx,
         })
         .is_err()
     {
-        return CallReply::Err(":no_proc".into());
+        return RequestReply::Err(":no_proc".into());
     }
     match reply_rx.blocking_recv() {
         Ok(r) => r,
-        Err(_) => CallReply::Err(":no_proc".into()),
+        Err(_) => RequestReply::Err(":no_proc".into()),
     }
 }
 
@@ -289,23 +290,23 @@ pub fn stop(env: &Env, pid: Pid) {
 /// schedules the actor tasks. Retained so existing scripts compile.
 pub fn drain_all(_env: &Env) {}
 
-fn invoke_cast(env: &Env, template: &Value, msg: Value, state: Value) -> RuntimeResult<Value> {
-    let Some(cb) = lookup_cb(template, "handle_cast") else {
+fn invoke_notify(env: &Env, template: &Value, msg: Value, state: Value) -> RuntimeResult<Value> {
+    let Some(cb) = lookup_cb(template, "handle_notify") else {
         return Ok(state);
     };
     let intermediate = apply(env, cb, vec![msg])?;
     apply(env, intermediate, vec![state])
 }
 
-fn invoke_call(
+fn invoke_request(
     env: &Env,
     template: &Value,
     msg: Value,
     state: Value,
 ) -> RuntimeResult<(Value, Value)> {
-    let Some(cb) = lookup_cb(template, "handle_call") else {
+    let Some(cb) = lookup_cb(template, "handle_request") else {
         return Err(RuntimeError::UnsupportedOperation(
-            ":no_call_handler".into(),
+            ":no_request_handler".into(),
         ));
     };
     let intermediate = apply(env, cb, vec![msg])?;
@@ -316,7 +317,7 @@ fn invoke_call(
         return Ok((xs.get(0).unwrap().clone(), xs.get(1).unwrap().clone()));
     }
     Err(RuntimeError::UnsupportedOperation(format!(
-        "handle_call must return [reply, new_state], got {}",
+        "handle_request must return [reply, new_state], got {}",
         result
     )))
 }

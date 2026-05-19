@@ -296,33 +296,33 @@ M.cube(3)                # 27
 ## actors
 
 `import "Actor"` exposes an Erlang/Elixir-style actor runtime. An actor is just
-an object with atom-keyed callbacks: `:init`, `:handle_call`, `:handle_cast`.
+an object with atom-keyed callbacks: `:init`, `:handle_request`, `:handle_notify`.
 Each actor processes its mailbox strictly in order; concurrency comes from
 interleaving many actors.
 
 ```ff
 Actor = import "Actor"
 
-handle_call = (msg, n) => match msg
+handle_request = (msg, n) => match msg
   :get -> [n, n]                       # [reply, new_state]
-handle_cast = (msg, n) => match msg
+handle_notify = (msg, n) => match msg
   [:add, x] -> n + x,                  # new_state only
   :reset -> 0
 
 counter = {
   :init: () => 0
-  :handle_call: handle_call
-  :handle_cast: handle_cast
+  :handle_request: handle_request
+  :handle_notify: handle_notify
 }
 
 [:ok, pid] = Actor.spawn(counter)
-Actor.cast(pid, [:add, 5])             # fire-and-forget
-Actor.cast(pid, [:add, 7])
-Actor.call(pid, :get)                  # [:ok, 12]
+Actor.notify(pid, [:add, 5])             # fire-and-forget
+Actor.notify(pid, [:add, 7])
+Actor.request(pid, :get)                  # [:ok, 12]
 ```
 
-Primitives: `Actor.spawn`, `Actor.cast`, `Actor.call`, `Actor.self`,
-`Actor.alive`, `Actor.stop`. `cast` returns `()` immediately; `call` blocks
+Primitives: `Actor.spawn`, `Actor.notify`, `Actor.request`, `Actor.self`,
+`Actor.alive`, `Actor.stop`. `notify` returns `()` immediately; `request` blocks
 the calling actor (or top-level code) until the target replies.
 `Actor.self(self_pid)` from inside a handler is detected as `:self_deadlock`
 and surfaces as `[:error, :self_deadlock]` rather than blocking forever;

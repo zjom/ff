@@ -1,15 +1,15 @@
 use im::vector;
 use std::sync::Arc;
 
-use crate::interpreter::runtime::{self, CallReply, Pid};
+use crate::interpreter::runtime::{self, Pid, RequestReply};
 use crate::interpreter::{RuntimeError, Value, type_name};
 use crate::native;
 
 pub fn members() -> Vec<(&'static str, Value)> {
     vec![
         ("spawn", spawn()),
-        ("cast", cast()),
-        ("call", call()),
+        ("notify", notify()),
+        ("request", request()),
         ("self", self_()),
         ("alive", alive()),
         ("stop", stop()),
@@ -38,10 +38,10 @@ fn err_msg(msg: impl Into<Arc<str>>) -> Value {
     ])
 }
 
-fn call_reply_to_value(reply: CallReply) -> Value {
+fn request_reply_to_value(reply: RequestReply) -> Value {
     match reply {
-        CallReply::Ok(v) => ok_atom_or_value(v),
-        CallReply::Err(s) => {
+        RequestReply::Ok(v) => ok_atom_or_value(v),
+        RequestReply::Err(s) => {
             if s.starts_with(':') {
                 err_atom(&s)
             } else {
@@ -72,19 +72,19 @@ fn spawn() -> Value {
     })
 }
 
-fn cast() -> Value {
-    native!("Actor.cast", 2, |env, args| {
-        let pid = expect_pid("Actor.cast", &args[0])?;
-        runtime::cast(env, pid, args[1].clone());
+fn notify() -> Value {
+    native!("Actor.notify", 2, |env, args| {
+        let pid = expect_pid("Actor.notify", &args[0])?;
+        runtime::notify(env, pid, args[1].clone());
         Ok(Value::Unit)
     })
 }
 
-fn call() -> Value {
-    native!("Actor.call", 2, |env, args| {
-        let pid = expect_pid("Actor.call", &args[0])?;
-        let reply = runtime::call(env, pid, args[1].clone());
-        Ok(call_reply_to_value(reply))
+fn request() -> Value {
+    native!("Actor.request", 2, |env, args| {
+        let pid = expect_pid("Actor.request", &args[0])?;
+        let reply = runtime::request(env, pid, args[1].clone());
+        Ok(request_reply_to_value(reply))
     })
 }
 

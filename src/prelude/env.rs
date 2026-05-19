@@ -1,6 +1,7 @@
-use im::{HashMap, Vector};
+use std::collections::HashMap;
 
 use crate::{
+    interop::native_fn,
     interpreter::{RuntimeError, Value, type_name},
     native,
     prelude::{err, ok},
@@ -11,21 +12,11 @@ pub fn members() -> Vec<(&'static str, Value)> {
 }
 
 fn args() -> Value {
-    native!("Env.args", 0, |_, _| {
-        let args: Vector<Value> = std::env::args().map(|a| Value::String(a.into())).collect();
-        Ok(Value::List(args))
-    })
+    native_fn("Env.args", || std::env::args().collect::<Vec<String>>())
 }
 
 fn vars() -> Value {
-    native!("Env.vars", 0, |_, _| {
-        let mut vars = HashMap::new();
-        std::env::vars().for_each(|(key, value)| {
-            vars.insert(Value::String(key.into()), Value::String(value.into()));
-        });
-
-        Ok(Value::Object(vars))
-    })
+    native_fn("Env.vars", || std::env::vars().collect::<HashMap<String, String>>())
 }
 
 fn var() -> Value {

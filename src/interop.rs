@@ -32,6 +32,17 @@ pub fn define_value<T: Serialize + ?Sized>(env: &Env, name: &str, v: &T) -> Runt
     Ok(())
 }
 
+/// Build a curried `Value::Native` from a Rust function without binding it.
+/// Argument types must be `DeserializeOwned`; the return type must be
+/// `Serialize` (or `()`). Use this when assembling module objects; use
+/// `register` to bind directly into an env.
+pub fn native_fn<F, Args>(name: &'static str, f: F) -> Value
+where
+    F: IntoNative<Args>,
+{
+    f.into_native(name)
+}
+
 /// Bind `name` to a Rust function in `env`. Argument types must be
 /// `DeserializeOwned`; the return type must be `Serialize` (or `()`).
 /// The native is curried — `f(a, b)` and `f(a)(b)` both work.
@@ -39,7 +50,7 @@ pub fn register<F, Args>(env: &Env, name: &'static str, f: F)
 where
     F: IntoNative<Args>,
 {
-    define(env, name, f.into_native(name));
+    define(env, name, native_fn(name, f));
 }
 
 pub trait IntoNative<Args> {

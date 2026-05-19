@@ -10,6 +10,7 @@ mod fs;
 mod global;
 mod http;
 mod io;
+mod json;
 mod object;
 mod utils;
 use utils::*;
@@ -70,6 +71,7 @@ fn native_module(name: &str) -> Option<Value> {
         "Actor" => actor::members(),
         "Io" => io::members(),
         "Http" => http::members(),
+        "Json" => json::members(),
         _ => return None,
     };
     Some(object(members.into_iter().map(|(k, v)| (k.to_string(), v))))

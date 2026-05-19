@@ -8,13 +8,20 @@ pub fn members() -> Vec<(&'static str, Value)> {
     vec![
         ("::", cons()),
         ("print", print()),
+        ("typeof", type_of()),
         ("println", println()),
         ("panic", panic()),
         ("default", default()),
     ]
 }
 
-pub fn panic() -> Value {
+fn type_of() -> Value {
+    native!("typeof", 1, |_env, args| {
+        Ok(Value::Atom(type_name(&args[0]).into()))
+    })
+}
+
+fn panic() -> Value {
     native!("panic", 1, |_env, args| {
         Err(RuntimeError::Panic(args[0].to_string()))
     })

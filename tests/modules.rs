@@ -361,7 +361,7 @@ fn module_imported_twice_returns_equal_values() {
 }
 
 #[test]
-fn module_destructuring() {
+fn imported_module_destructures_into_constituents() {
     assert_eq!(
         eval("{get, put} = import \"Object\"\nm = put {:one: 1} :two 2\nget m :two"),
         "2"

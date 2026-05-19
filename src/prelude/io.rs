@@ -1,17 +1,22 @@
 use im::Vector;
 use std::io::BufRead;
 
+use crate::interop::{FfResult, native_fn};
 use crate::interpreter::{LazyState, RuntimeResult};
 use crate::native;
 use crate::prelude::{err_str_tuple, object, ok_tuple};
 use std::io::BufReader;
-use std::io::{Bytes, Read};
+use std::io::{Bytes, Read, Write};
 use std::sync::{Arc, Mutex};
 
 use crate::prelude::Value;
 
 pub fn members() -> Vec<(&'static str, Value)> {
-    vec![("stdin", stdin())]
+    vec![
+        ("stdin", stdin()),
+        ("stdout", stdout()),
+        ("stderr", stderr()),
+    ]
 }
 
 fn stdin() -> Value {
@@ -32,6 +37,7 @@ impl Stdin {
             Ok(ok_tuple(Self::bytes_stream(reader.bytes())?))
         })
     }
+
     fn bytes_stream(mut bytes: Bytes<BufReader<std::io::Stdin>>) -> RuntimeResult<Value> {
         match bytes.next() {
             Some(res) => match res {
@@ -87,5 +93,73 @@ fn strip_line_ending(s: &mut String) {
         if s.ends_with('\r') {
             s.pop();
         }
+    }
+}
+
+fn stdout() -> Value {
+    native!("Io.stdout", 0, move |_, _| Ok(Stdout::object()))
+}
+
+struct Stdout {}
+impl Stdout {
+    fn object() -> Value {
+        let entries = vec![
+            ("write", Self::write_fn()),
+            ("writeln", Self::writeln_fn()),
+            ("flush", Self::flush_fn()),
+        ];
+        object(entries)
+    }
+
+    fn write_fn() -> Value {
+        native_fn("stdout.write", move |s: String| -> FfResult<()> {
+            std::io::stdout().write_all(s.as_bytes()).into()
+        })
+    }
+
+    fn writeln_fn() -> Value {
+        native_fn("stdout.writeln", move |s: String| -> FfResult<()> {
+            writeln!(std::io::stdout(), "{}", s).into()
+        })
+    }
+
+    fn flush_fn() -> Value {
+        native_fn("stdout.flush", move || -> FfResult<()> {
+            std::io::stdout().flush().into()
+        })
+    }
+}
+
+fn stderr() -> Value {
+    native!("Io.stderr", 0, move |_, _| Ok(Stderr::object()))
+}
+
+struct Stderr {}
+impl Stderr {
+    fn object() -> Value {
+        let entries = vec![
+            ("write", Self::write_fn()),
+            ("writeln", Self::writeln_fn()),
+            ("flush", Self::flush_fn()),
+        ];
+        object(entries)
+    }
+
+    fn write_fn() -> Value {
+        native_fn("stderr.write", move |s: String| -> FfResult<()> {
+            std::io::stderr().write_all(s.as_bytes()).into()
+        })
+    }
+
+    fn writeln_fn() -> Value {
+        native_fn("stderr.writeln", move |s: String| -> FfResult<()> {
+            writeln!(std::io::stderr(), "{}", s).into()
+        })
+    }
+
+    fn flush_fn() -> Value {
+        native_fn("stderr.flush", move || -> FfResult<()> {
+            std::io::stderr().flush().into()
+        })
     }
 }

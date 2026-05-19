@@ -5,7 +5,7 @@ use crate::interpreter::Value;
 
 members! {
     "Env",
-    args => || -> Vec<String> { std::env::args().collect() },
+    args => || std::env::args().collect::<Vec<String>>(),
     vars => || std::env::vars().collect::<HashMap<String, String>>(),
     // Accept either a string key (`"PATH"`) or an atom (`:PATH`, which arrives
     // as the serialized form `":PATH"`); strip the leading `:` to recover the

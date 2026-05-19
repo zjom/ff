@@ -1,7 +1,7 @@
 use clap::Parser;
-use ff::cli::Cli;
-use ff::eval::eval_file;
-use ff::repl::Repl;
+use f2::cli::Cli;
+use f2::eval::eval_file;
+use f2::repl::Repl;
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();

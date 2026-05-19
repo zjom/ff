@@ -1,3 +1,4 @@
+use crate::interop::{FfResult, native_fn};
 use crate::prelude::{err, object, ok};
 use std::cell::RefCell;
 use std::fs::{self, File};
@@ -5,8 +6,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::rc::Rc;
 
-use im::{HashMap, Vector};
-use rug::Rational;
+use im::Vector;
+use serde::Serialize;
 
 use crate::interpreter::{LazyState, RuntimeError, RuntimeResult, Value, type_name};
 use crate::native;
@@ -44,46 +45,43 @@ fn file_object(path: Rc<str>) -> Value {
 }
 
 fn write_fn(path: Rc<str>) -> Value {
-    native!("file.write", 1, move |_env, args| {
-        match args[0] {
-            Value::String(ref data) => Ok(match fs::write(&*path, &**data) {
-                Ok(()) => ok(Value::Unit),
-                Err(e) => err(e.to_string()),
-            }),
-            _ => Err(RuntimeError::NativeTypeError {
-                native: "file.write",
-                expected: "string",
-                got: type_name(&args[0]),
-            }),
-        }
+    native_fn("file.write", move |data: String| -> FfResult<()> {
+        fs::write(&*path, &data).into()
     })
 }
 
 fn append_fn(path: Rc<str>) -> Value {
-    native!("file.append", 1, move |_env, args| {
-        match args[0] {
-            Value::String(ref data) => Ok(match fs::OpenOptions::new().append(true).open(&*path) {
-                Ok(mut f) => match f.write_all(data.as_bytes()) {
-                    Ok(()) => ok(Value::Unit),
-                    Err(e) => err(e.to_string()),
-                },
-                Err(e) => err(e.to_string()),
-            }),
-            _ => Err(RuntimeError::NativeTypeError {
-                native: "file.write",
-                expected: "string",
-                got: type_name(&args[0]),
-            }),
-        }
+    native_fn("file.append", move |data: String| -> FfResult<()> {
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&*path)
+            .and_then(|mut f| f.write_all(data.as_bytes()))
+            .into()
     })
 }
 
 fn read_fn(path: Rc<str>) -> Value {
-    native!("file.read", 0, move |_env, _args| {
-        Ok(match fs::read_to_string(&*path) {
-            Ok(s) => ok(Value::String(s.into())),
-            Err(e) => err(e.to_string()),
-        })
+    native_fn("file.read", move || -> FfResult<String> {
+        fs::read_to_string(&*path).into()
+    })
+}
+
+#[derive(Serialize)]
+struct FileMetadata {
+    size: u64,
+    is_file: bool,
+    is_dir: bool,
+}
+
+fn metadata_fn(path: Rc<str>) -> Value {
+    native_fn("file.metadata", move || -> FfResult<FileMetadata> {
+        fs::metadata(&*path)
+            .map(|m| FileMetadata {
+                size: m.len(),
+                is_file: m.is_file(),
+                is_dir: m.is_dir(),
+            })
+            .into()
     })
 }
 
@@ -125,22 +123,4 @@ fn strip_line_ending(s: &mut String) {
             s.pop();
         }
     }
-}
-
-fn metadata_fn(path: Rc<str>) -> Value {
-    native!("file.metadata", 0, move |_env, _args| {
-        Ok(match fs::metadata(&*path) {
-            Ok(m) => {
-                let mut entries: HashMap<Value, Value> = HashMap::new();
-                entries.insert(
-                    Value::String("size".into()),
-                    Value::Number(Rc::new(Rational::from(m.len()))),
-                );
-                entries.insert(Value::String("is_file".into()), Value::Bool(m.is_file()));
-                entries.insert(Value::String("is_dir".into()), Value::Bool(m.is_dir()));
-                ok(Value::Object(entries))
-            }
-            Err(e) => err(e.to_string()),
-        })
-    })
 }

@@ -11,6 +11,7 @@ mod global;
 mod http;
 mod io;
 mod json;
+mod list;
 mod object;
 mod string;
 mod utils;
@@ -74,6 +75,7 @@ fn native_module(name: &str) -> Option<Value> {
         "Http" => http::members(),
         "Json" => json::members(),
         "String" => string::members(),
+        "List" => list::members(),
         _ => return None,
     };
     Some(object(members.into_iter().map(|(k, v)| (k.to_string(), v))))

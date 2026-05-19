@@ -6,10 +6,8 @@
 //! [`apply`]. `Actor.request` synchronously waits on a `oneshot::Receiver` for
 //! the reply.
 //!
-//! Unlike the previous cooperative-single-threaded scheduler, this runtime is
-//! genuinely parallel: independent actors run on independent OS threads from
-//! tokio's blocking pool. Per-actor message ordering is still strict (one
-//! handler at a time per actor).
+//! Independent actors run on independent tokio threads from
+//! tokio's blocking pool. Per-actor message ordering is strict (one handler at a time per actor).
 //!
 //! Self-deadlock detection: `Actor.request(self, _)` from inside a handler is
 //! recognised via a thread-local current pid and rejected with

@@ -12,13 +12,67 @@ use crate::interpreter::{LazyState, RuntimeError, RuntimeResult, Value, type_nam
 use crate::native;
 
 pub fn members() -> Vec<(&'static str, Value)> {
-    vec![("open", file_open()), ("exists", exists())]
+    vec![
+        ("open", file_open()),
+        ("exists", exists()),
+        ("read_dir", dir_read()),
+    ]
 }
 
 fn exists() -> Value {
     native_fn("Fs.exists", move |path: String| -> FfResult<bool> {
         fs::exists(path).into()
     })
+}
+
+fn dir_read() -> Value {
+    native!("Fs.read_dir", 1, move |_env, args| {
+        let Value::String(path) = &args[0] else {
+            return Err(RuntimeError::NativeTypeError {
+                native: "Fs.read_dir",
+                expected: "string",
+                got: type_name(&args[0]),
+            });
+        };
+        Ok(match fs::read_dir(&**path) {
+            Ok(iter) => ok_tuple(dir_stream(iter)?),
+            Err(e) => err_str_tuple(e.to_string()),
+        })
+    })
+}
+
+fn dir_stream(mut iter: fs::ReadDir) -> RuntimeResult<Value> {
+    match iter.next() {
+        Some(res) => match res {
+            Ok(entry) => {
+                let tail = Arc::new(Mutex::new(LazyState::Native(Box::new(move || {
+                    dir_stream(iter)
+                }))));
+                Ok(Value::Cons {
+                    head: Arc::new(ok_tuple(dir_entry_object(entry))),
+                    tail,
+                })
+            }
+            Err(e) => Ok(err_str_tuple(e.to_string())),
+        },
+        None => Ok(Value::List(Vector::new())),
+    }
+}
+
+fn dir_entry_object(entry: fs::DirEntry) -> Value {
+    let path: Arc<str> = entry.path().to_string_lossy().into();
+    let name: Arc<str> = entry.file_name().to_string_lossy().into();
+    let (is_file, is_dir, is_symlink) = match entry.file_type() {
+        Ok(ft) => (ft.is_file(), ft.is_dir(), ft.is_symlink()),
+        Err(_) => (false, false, false),
+    };
+    object(vec![
+        ("name", Value::String(name)),
+        ("path", Value::String(path)),
+        ("is_file", Value::Bool(is_file)),
+        ("is_dir", Value::Bool(is_dir)),
+        ("is_symlink", Value::Bool(is_symlink)),
+    ])
 }
 
 fn file_open() -> Value {

@@ -385,7 +385,8 @@ see the `interop` module docs for more information.
 ## running
 
 ```sh
-cargo run                # REPL
-cargo run -- path.ff     # run a file
-cargo test               # run the test suite
+cargo install f2
+
+f2                    # REPL
+f2 path.ff            # run a file
 ```

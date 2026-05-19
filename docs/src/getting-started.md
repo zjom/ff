@@ -2,12 +2,15 @@
 
 ## Running ff
 
-ff ships as a single Rust binary. From the repo root:
+ff ships as a single Rust binary.
+
+Install via Cargo
 
 ```sh
-cargo run                # REPL
-cargo run -- path.ff     # run a file
-cargo test               # run the test suite
+cargo install f2
+
+f2                    # REPL
+f2 path.ff            # run a file
 ```
 
 The REPL evaluates one expression per line. Multi-line input is supported

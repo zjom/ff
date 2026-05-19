@@ -35,9 +35,7 @@ pub fn native_module(name: &str) -> Option<Value> {
         "Env" => env::members(),
         _ => return None,
     };
-    Some(object_with_atom_keys(
-        members.into_iter().map(|(k, v)| (k.to_string(), v)),
-    ))
+    Some(object(members.into_iter().map(|(k, v)| (k.to_string(), v))))
 }
 
 /// Resolve and load a module by path. Built-in modules (`io`, etc.) are checked
@@ -68,7 +66,7 @@ pub fn import_module(env: &Env, path_str: &str) -> RuntimeResult<Value> {
     let exports = ctx.current_exports.replace(prev_exports);
     *ctx.current_file.borrow_mut() = prev_file;
     result?;
-    Ok(object_with_atom_keys(exports.unwrap_or_default()))
+    Ok(object(exports.unwrap_or_default()))
 }
 
 // Build a `Value::Native` with the given name, arity, and body. The body is

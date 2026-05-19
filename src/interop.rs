@@ -62,7 +62,13 @@ fn json_to_value(j: Json) -> Value {
         Json::Null => Value::Unit,
         Json::Bool(b) => Value::Bool(b),
         Json::Number(n) => Value::Number(Rc::new(json_number_to_rational(&n))),
-        Json::String(s) => Value::String(s.into()),
+        Json::String(s) => {
+            if s.starts_with(':') {
+                Value::Atom(s.into())
+            } else {
+                Value::String(s.into())
+            }
+        }
         Json::Array(arr) => Value::List(arr.into_iter().map(json_to_value).collect()),
         Json::Object(object) => Value::Object(
             object
@@ -91,9 +97,7 @@ fn value_to_json(v: Value) -> RuntimeResult<Json> {
         Value::Bool(b) => Json::Bool(b),
         Value::Number(rat) => rational_to_json(&rat)?,
         Value::String(s) => Json::String(s.to_string()),
-        // Atoms degrade to plain strings on the way out — that's the most
-        // useful default for serde-tagged enums (`:Ok` ↔ `"Ok"`).
-        Value::Atom(name) => Json::String(name.to_string()),
+        Value::Atom(name) => Json::String(format!(":{name}")),
         Value::List(xs) => Json::Array(
             xs.into_iter()
                 .map(value_to_json)

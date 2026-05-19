@@ -36,12 +36,12 @@ pub(crate) fn err(msg: impl Into<String>) -> Value {
     ])
 }
 
-pub(crate) fn dict(entries: Vec<(&str, Value)>) -> Value {
+pub(crate) fn object(entries: Vec<(&str, Value)>) -> Value {
     let entries = entries
         .into_iter()
         .map(|(name, value)| (Value::String(name.into()), value))
         .collect();
-    Value::Dict(entries)
+    Value::Object(entries)
 }
 
 pub(crate) fn native_module(name: &str) -> Option<Value> {

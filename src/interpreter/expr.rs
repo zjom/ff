@@ -170,7 +170,7 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                 .map(|e| eval_expr(e, env))
                 .collect::<Result<_>>()?,
         )),
-        Expr::Dict(entries) => {
+        Expr::Object(entries) => {
             let mut out: Vector<(Value, Value)> = Vector::new();
             for (k, v) in entries {
                 let kv = eval_expr(k, env)?;
@@ -181,7 +181,7 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                     out.push_back((kv, vv));
                 }
             }
-            Ok(Value::Dict(out))
+            Ok(Value::Object(out))
         }
         Expr::Set(items) => {
             let mut out: Vector<Value> = Vector::new();
@@ -205,7 +205,7 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
         } => match eval_expr(cond, env)? {
             Value::Bool(true) => eval_expr(then_branch, env),
             Value::Bool(false) => eval_expr(else_branch, env),
-            v => bail!("if condition must be bool, got {}", type_name(&v)),
+            v => bail!("if condition must be Bool, got {}", type_name(&v)),
         },
         Expr::Match { scrutinee, arms } => {
             let val = eval_expr(scrutinee, env)?;
@@ -219,7 +219,7 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                         match eval_expr(guard, &scope)? {
                             Value::Bool(true) => {}
                             Value::Bool(false) => continue,
-                            v => bail!("match guard must be bool, got {}", type_name(&v)),
+                            v => bail!("match guard must be Bool, got {}", type_name(&v)),
                         }
                     }
                     return eval_expr(&arm.body, &scope);
@@ -242,14 +242,14 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
         } => {
             let start_v = eval_expr(start, env)?;
             let Value::Number(s) = start_v else {
-                bail!("range start must be a number, got {}", type_name(&start_v));
+                bail!("Range start must be a Number, got {}", type_name(&start_v));
             };
             let end_v = match end {
                 None => None,
                 Some(e) => {
                     let v = eval_expr(e, env)?;
                     let Value::Number(n) = v else {
-                        bail!("range end must be a number, got {}", type_name(&v));
+                        bail!("Range end must be a Number, got {}", type_name(&v));
                     };
                     Some(n)
                 }
@@ -263,7 +263,7 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
         Expr::Import(path) => {
             let v = eval_expr(path, env)?;
             let Value::String(s) = v else {
-                bail!("import expects string path, got {}", type_name(&v));
+                bail!("import expects String path, got {}", type_name(&v));
             };
             crate::prelude::import_module(env, &s)
         }
@@ -274,24 +274,24 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                     .get(*i)
                     .cloned()
                     .ok_or_else(|| anyhow!("index {} out of range (len {})", i, xs.len())),
-                (Value::Dict(es), AccessKey::Field(name)) => {
+                (Value::Object(es), AccessKey::Field(name)) => {
                     let k = Value::String(name.as_str().into());
                     es.iter()
                         .find(|(ek, _)| ek == &k)
                         .map(|(_, v)| v.clone())
-                        .ok_or_else(|| anyhow!("dict has no key {:?}", name))
+                        .ok_or_else(|| anyhow!("Object has no key {:?}", name))
                 }
-                (Value::Dict(es), AccessKey::Atom(name)) => {
+                (Value::Object(es), AccessKey::Atom(name)) => {
                     let k = Value::Atom(name.as_str().into());
                     es.iter()
                         .find(|(ek, _)| ek == &k)
                         .map(|(_, v)| v.clone())
-                        .ok_or_else(|| anyhow!("dict has no key :{}", name))
+                        .ok_or_else(|| anyhow!("Object has no key :{}", name))
                 }
                 (Value::Module { members, .. }, AccessKey::Field(name)) => members
                     .get(name)
                     .cloned()
-                    .ok_or_else(|| anyhow!("module has no member `.{}`", name)),
+                    .ok_or_else(|| anyhow!("Module has no member `.{}`", name)),
                 (v, AccessKey::Index(_)) => {
                     bail!("cannot index into {}", type_name(v))
                 }

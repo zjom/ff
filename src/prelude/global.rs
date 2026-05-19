@@ -39,14 +39,14 @@ fn cons() -> Value {
                     Ok(Value::Set(xs))
                 }
             }
-            (Value::List(kvs), Value::Dict(mut xs)) => {
+            (Value::List(kvs), Value::Object(mut xs)) => {
                 if kvs.len() == 2 {
                     let (key, value) = (kvs[0].clone(), kvs[1].clone());
                     xs.retain(|(k, _)| k != &key);
                     xs.push_back((key, value));
-                    Ok(Value::Dict(xs))
+                    Ok(Value::Object(xs))
                 } else {
-                    bail!("unsupported operation: can only cons a 2-element list with a dict")
+                    bail!("unsupported operation: can only cons a 2-element list with an object")
                 }
             }
 
@@ -63,7 +63,7 @@ fn default() -> Value {
             Value::String(_) => Value::String("".into()),
             Value::Bool(_) => Value::Bool(false),
             Value::List(_) => Value::List(Vector::new()),
-            Value::Dict(_) => Value::Dict(Vector::new()),
+            Value::Object(_) => Value::Object(Vector::new()),
             Value::Set(_) => Value::Set(Vector::new()),
             Value::Range { .. } => Value::Range {
                 start: Rational::new().into(),

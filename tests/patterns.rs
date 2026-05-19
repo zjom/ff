@@ -33,7 +33,7 @@ fn destructure_unit() {
 }
 
 #[test]
-fn destructure_dict() {
+fn destructure_object() {
     assert_eq!(
         eval(
             r#"{"name": who} = {"name": "ada", "age": 36}
@@ -88,8 +88,8 @@ fn match_list_rest() {
 }
 
 #[test]
-fn match_dict_pattern() {
-    // Dict pattern matches if all required keys exist; extras allowed.
+fn match_object_pattern() {
+    // object pattern matches if all required keys exist; extras allowed.
     assert_eq!(
         eval(
             r#"match {"name": "ada", "age": 36}
@@ -188,9 +188,9 @@ fn cons_pattern_set_destructure() {
 }
 
 #[test]
-fn cons_pattern_dict_destructure() {
+fn cons_pattern_object_destructure() {
     // Head is the first entry as a [key, value] list — the inverse of how
-    // `::` prepends a `[k, v]` pair onto a dict.
+    // `::` prepends a `[k, v]` pair onto a object.
     assert_eq!(
         eval(
             r#"h :: t = {"a": 1, "b": 2}
@@ -337,7 +337,7 @@ fn match_tagged_pair() {
 }
 
 #[test]
-fn destructure_dict_with_atom_key() {
+fn destructure_object_with_atom_key() {
     assert_eq!(
         eval("{:name: who} = {:name: \"ada\", :age: 36}\nwho"),
         r#""ada""#

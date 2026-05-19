@@ -49,8 +49,8 @@ fn match_into(
             } => match_seq_range(items, start, end.as_deref(), *inclusive, env, bindings),
             _ => match_seq(items, val, env, bindings),
         },
-        Pattern::Dict(entries) => match val {
-            Value::Dict(d) => {
+        Pattern::Object(entries) => match val {
+            Value::Object(d) => {
                 for (key_expr, sub_pat) in entries {
                     let key = eval_expr(key_expr, env)?;
                     let Some((_, found)) = d.iter().find(|(k, _)| k == &key) else {
@@ -62,7 +62,7 @@ fn match_into(
                 }
                 Ok(true)
             }
-            // Dict patterns also destructure modules, keyed by member name:
+            // Object patterns also destructure modules, keyed by member name:
             // `{Left, Right} = import "lib.ff"`.
             Value::Module { members, .. } => {
                 for (key_expr, sub_pat) in entries {
@@ -113,7 +113,7 @@ fn match_into(
                 }
                 match_into(tail, &t, env, bindings)
             }
-            Value::Dict(es) => {
+            Value::Object(es) => {
                 let Some((k, v)) = es.front() else {
                     return Ok(false);
                 };
@@ -123,7 +123,7 @@ fn match_into(
                 }
                 let mut rest = es.clone();
                 rest.pop_front();
-                match_into(tail, &Value::Dict(rest), env, bindings)
+                match_into(tail, &Value::Object(rest), env, bindings)
             }
             Value::Range {
                 start,

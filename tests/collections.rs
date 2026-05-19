@@ -28,18 +28,18 @@ fn unit_literal() {
 }
 
 #[test]
-fn empty_dict_through_var() {
-    // Empty `{}` is ambiguous in pattern position; constructor side parses to dict.
+fn empty_object_through_var() {
+    // Empty `{}` is ambiguous in pattern position; constructor side parses to object.
     assert_eq!(eval("d = {}\nd"), "{}");
 }
 
 #[test]
-fn dict_literal() {
+fn object_literal() {
     assert_eq!(eval(r#"{"a": 1, "b": 2}"#), r#"{"a": 1, "b": 2}"#);
 }
 
 #[test]
-fn dict_field_access() {
+fn object_field_access() {
     assert_eq!(
         eval(
             r#"d = {"name": "ada", "age": 36}
@@ -50,7 +50,7 @@ d.name"#
 }
 
 #[test]
-fn dict_last_write_wins() {
+fn object_last_write_wins() {
     assert_eq!(eval(r#"{"k": 1, "k": 2}.k"#), "2");
 }
 
@@ -66,7 +66,7 @@ fn nested_dot_access() {
 }
 
 #[test]
-fn dict_into_list_access() {
+fn object_into_list_access() {
     assert_eq!(eval(r#"{"items": [10, 20, 30]}.items.1"#), "20");
 }
 
@@ -100,12 +100,12 @@ fn list_leading_and_trailing_separators() {
 }
 
 #[test]
-fn dict_multiline() {
+fn object_multiline() {
     assert_eq!(eval("{\n  \"a\": 1,\n  \"b\": 2\n}"), r#"{"a": 1, "b": 2}"#);
 }
 
 #[test]
-fn dict_value_on_next_line() {
+fn object_value_on_next_line() {
     assert_eq!(eval("{\"a\":\n  1}"), r#"{"a": 1}"#);
 }
 

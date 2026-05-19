@@ -87,8 +87,8 @@ op_paren      = { "(" ~ op_paren_name ~ ")" }
 prefix_op  = _{ neg | logical_not | custom_prefix }
 postfix_op = _{ call_args | dot_access | juxt_arg }
 
-// `list.0` for list index, `dict.foo` for dict string-key lookup,
-// `dict.:foo` for dict atom-key lookup. `dot_index` is digits-only so
+// `list.0` for list index, `object.foo` for object string-key lookup,
+// `object.:foo` for object atom-key lookup. `dot_index` is digits-only so
 // `xs.0.1` chains as `(xs.0).1` rather than being read as a single decimal index.
 dot_index  = @{ ASCII_DIGIT+ }
 dot_access = { "." ~ (dot_index | atom | ident) }
@@ -114,7 +114,7 @@ infix_op   = _{
 }
 
 // ----- Collection separators -----
-// Inside `[]`, `{}`, dict/set patterns and pattern-lists, items can be
+// Inside `[]`, `{}`, object/set patterns and pattern-lists, items can be
 // separated by any non-empty run of commas and/or newlines. This makes layouts
 // like `[1,\n 2]`, `[\n 1\n 2\n]`, and `[1,\n  ,2]` all parse the same.
 coll_sep  = _{ (NEWLINE | ",")+ }
@@ -129,11 +129,11 @@ pattern_list = { "[" ~ coll_sep? ~ (pattern_item ~ (coll_sep ~ pattern_item)* ~ 
 // `()` matches the Unit value.
 pattern_unit = { "(" ~ NEWLINE* ~ ")" }
 
-// Dict-pattern entries: full `key: pat` (key is an expression, value a sub-pattern)
+// Object-pattern entries: full `key: pat` (key is an expression, value a sub-pattern)
 // or shorthand `name`, which desugars to `"name": name` — handy for destructuring
 // modules: `{Left, Right} = import "lib.ff"`.
-pattern_dict_entry = { (expr ~ NEWLINE* ~ ":" ~ NEWLINE* ~ pattern) | ident }
-pattern_dict       = { "{" ~ coll_sep? ~ (pattern_dict_entry ~ (coll_sep ~ pattern_dict_entry)* ~ coll_sep?)? ~ "}" }
+pattern_object_entry = { (expr ~ NEWLINE* ~ ":" ~ NEWLINE* ~ pattern) | ident }
+pattern_object       = { "{" ~ coll_sep? ~ (pattern_object_entry ~ (coll_sep ~ pattern_object_entry)* ~ coll_sep?)? ~ "}" }
 pattern_set        = { "{" ~ coll_sep? ~ pattern ~ (coll_sep ~ pattern)* ~ coll_sep? ~ "}" }
 
 // `wildcard` and `bool` precede `ident` so they aren't shadowed. `op_paren`
@@ -143,7 +143,7 @@ pattern_atom = _{
       pattern_list
     | op_paren
     | pattern_unit
-    | pattern_dict
+    | pattern_object
     | pattern_set
     | number
     | string
@@ -178,8 +178,8 @@ list  = { "[" ~ NEWLINE* ~ range ~ NEWLINE* ~ "]"
         | "[" ~ coll_sep? ~ (expr ~ (coll_sep ~ expr)* ~ coll_sep?)? ~ "]" }
 // `()` is the Unit literal.
 unit = { "(" ~ NEWLINE* ~ ")" }
-dict_entry = { expr ~ NEWLINE* ~ ":" ~ NEWLINE* ~ expr }
-dict       = { "{" ~ coll_sep? ~ (dict_entry ~ (coll_sep ~ dict_entry)* ~ coll_sep?)? ~ "}" }
+object_entry = { expr ~ NEWLINE* ~ ":" ~ NEWLINE* ~ expr }
+object       = { "{" ~ coll_sep? ~ (object_entry ~ (coll_sep ~ object_entry)* ~ coll_sep?)? ~ "}" }
 set        = { "{" ~ coll_sep? ~ expr ~ (coll_sep ~ expr)* ~ coll_sep? ~ "}" }
 
 // ----- Scope (block expression) -----
@@ -258,7 +258,7 @@ primary = _{
     | bool
     | atom
     | list
-    | dict
+    | object
     | set
     | op_paren
     | scope
@@ -275,7 +275,7 @@ expr = {
 
 // ----- Statements -----
 // LHS is a pattern, so `a = 1`, `[b, ..] = a`, `(x, y) = pair`, and
-// `{ "k": v } = some_dict` all work.
+// `{ "k": v } = some_object` all work.
 assignment = { pattern ~ assign ~ expr }
 
 // `export Left, Right` exports the named bindings from the current module.

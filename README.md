@@ -31,12 +31,12 @@ true && !false     # true
 # `()` is the unit value
 ()
 
-# three collections — lists, dicts, sets. Lists are heterogeneous.
+# three collections — lists, objects, sets. Lists are heterogeneous.
 [1, "two", true]
 {"name": "ada", "age": 36}
 {1, 2, 2, 3}             # {1, 2, 3} — dedup
 
-# `.` indexes lists by position and dicts by key
+# `.` indexes lists by position and objects by key
 [10, 20, 30].0           # 10
 {"x": {"y": 7}}.x.y      # 7
 ```
@@ -170,8 +170,8 @@ handle(safe_div(10, 2))      # 5
 handle(safe_div(10, 0))      # -1
 ```
 
-Atoms work anywhere a value does — list/set elements, dict keys, and patterns.
-Dicts keyed by atoms read back with `.:name`:
+Atoms work anywhere a value does — list/set elements, object keys, and patterns.
+objects keyed by atoms read back with `.:name`:
 
 ```ff
 m = {:name: "ada", :age: 36}

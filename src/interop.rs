@@ -54,8 +54,9 @@ fn json_to_value(j: Json) -> Value {
         Json::Number(n) => Value::Number(Rc::new(json_number_to_rational(&n))),
         Json::String(s) => Value::String(s.into()),
         Json::Array(arr) => Value::List(arr.into_iter().map(json_to_value).collect()),
-        Json::Object(map) => Value::Dict(
-            map.into_iter()
+        Json::Object(object) => Value::Object(
+            object
+                .into_iter()
                 .map(|(k, v)| (Value::String(k.into()), json_to_value(v)))
                 .collect(),
         ),
@@ -85,23 +86,26 @@ fn value_to_json(v: Value) -> Result<Json> {
         Value::Atom(name) => Json::String(name.to_string()),
         Value::List(xs) => Json::Array(xs.into_iter().map(value_to_json).collect::<Result<_>>()?),
         Value::Set(xs) => Json::Array(xs.into_iter().map(value_to_json).collect::<Result<_>>()?),
-        Value::Dict(entries) => {
-            let mut map = serde_json::Map::new();
+        Value::Object(entries) => {
+            let mut obj = serde_json::Map::new();
             for (k, v) in entries {
                 let key = match k {
                     Value::String(s) => s.to_string(),
                     Value::Atom(s) => s.to_string(),
-                    other => bail!("cannot deserialize dict with non-string key: {}", other),
+                    other => bail!(
+                        "cannot deserialize Object with non-string/atom key: {}",
+                        other
+                    ),
                 };
-                map.insert(key, value_to_json(v)?);
+                obj.insert(key, value_to_json(v)?);
             }
-            Json::Object(map)
+            Json::Object(obj)
         }
         Value::Range { .. } | Value::Cons { .. } => {
-            bail!("cannot deserialize lazy values; collect into a list first")
+            bail!("cannot deserialize lazy values; collect into a List first")
         }
         Value::Function { .. } | Value::Native { .. } | Value::Module { .. } => {
-            bail!("cannot deserialize a function or module")
+            bail!("cannot deserialize a Function or Module")
         }
     })
 }

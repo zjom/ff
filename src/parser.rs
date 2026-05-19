@@ -130,11 +130,11 @@ fn build_pattern(pair: Pair<Rule>) -> Result<Pattern> {
                 .collect::<Result<_>>()?,
         )),
         Rule::pattern_unit => Ok(Pattern::Unit),
-        Rule::pattern_dict => {
+        Rule::pattern_object => {
             let mut entries = Vec::new();
             for entry in pair.into_inner() {
                 let mut inner = entry.into_inner();
-                let first = inner.next().ok_or_else(|| anyhow!("empty dict entry"))?;
+                let first = inner.next().ok_or_else(|| anyhow!("empty object entry"))?;
                 match first.as_rule() {
                     Rule::ident => {
                         // `{name}` shorthand desugars to `{"name": name}` —
@@ -145,14 +145,16 @@ fn build_pattern(pair: Pair<Rule>) -> Result<Pattern> {
                     Rule::expr => {
                         let key = build_expr(first)?;
                         let val = build_pattern(
-                            inner.next().ok_or_else(|| anyhow!("missing dict value"))?,
+                            inner
+                                .next()
+                                .ok_or_else(|| anyhow!("missing Object value"))?,
                         )?;
                         entries.push((key, val));
                     }
-                    r => return Err(anyhow!("unexpected dict entry: {:?}", r)),
+                    r => return Err(anyhow!("unexpected object entry: {:?}", r)),
                 }
             }
-            Ok(Pattern::Dict(entries))
+            Ok(Pattern::Object(entries))
         }
         Rule::pattern_set => Ok(Pattern::Set(
             pair.into_inner()
@@ -284,7 +286,7 @@ fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
 fn build_range(pair: Pair<Rule>) -> Result<Expr> {
     let kind = pair.as_rule();
     let mut inner = pair.into_inner();
-    let start = build_expr(inner.next().ok_or_else(|| anyhow!("missing range start"))?)?;
+    let start = build_expr(inner.next().ok_or_else(|| anyhow!("missing Range start"))?)?;
     match kind {
         Rule::range_open => Ok(Expr::Range {
             start: Box::new(start),
@@ -292,14 +294,14 @@ fn build_range(pair: Pair<Rule>) -> Result<Expr> {
             inclusive: false,
         }),
         Rule::range_excl | Rule::range_incl => {
-            let end = build_expr(inner.next().ok_or_else(|| anyhow!("missing range end"))?)?;
+            let end = build_expr(inner.next().ok_or_else(|| anyhow!("missing Range end"))?)?;
             Ok(Expr::Range {
                 start: Box::new(start),
                 end: Some(Box::new(end)),
                 inclusive: kind == Rule::range_incl,
             })
         }
-        r => Err(anyhow!("unexpected range form: {:?}", r)),
+        r => Err(anyhow!("unexpected Range form: {:?}", r)),
     }
 }
 
@@ -330,15 +332,19 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
             Ok(Expr::List(inner.map(build_expr).collect::<Result<_>>()?))
         }
         Rule::unit => Ok(Expr::Unit),
-        Rule::dict => {
+        Rule::object => {
             let mut entries = Vec::new();
             for entry in pair.into_inner() {
                 let mut inner = entry.into_inner();
-                let k = build_expr(inner.next().ok_or_else(|| anyhow!("missing dict key"))?)?;
-                let v = build_expr(inner.next().ok_or_else(|| anyhow!("missing dict value"))?)?;
+                let k = build_expr(inner.next().ok_or_else(|| anyhow!("missing Object key"))?)?;
+                let v = build_expr(
+                    inner
+                        .next()
+                        .ok_or_else(|| anyhow!("missing Object value"))?,
+                )?;
                 entries.push((k, v));
             }
-            Ok(Expr::Dict(entries))
+            Ok(Expr::Object(entries))
         }
         Rule::set => Ok(Expr::Set(
             pair.into_inner().map(build_expr).collect::<Result<_>>()?,

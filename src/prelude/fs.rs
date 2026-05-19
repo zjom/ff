@@ -1,4 +1,4 @@
-use crate::prelude::{dict, err, ok};
+use crate::prelude::{err, object, ok};
 use std::cell::RefCell;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
@@ -24,11 +24,11 @@ fn open_file() -> Value {
         if !Path::new(&**path).exists() {
             err("file not exists");
         }
-        Ok(file_dict(path.clone()))
+        Ok(file_object(path.clone()))
     })
 }
 
-fn file_dict(path: Rc<str>) -> Value {
+fn file_object(path: Rc<str>) -> Value {
     let entries = vec![
         ("path", Value::String(path.clone())),
         ("write", write_fn(path.clone())),
@@ -37,7 +37,7 @@ fn file_dict(path: Rc<str>) -> Value {
         ("lines", lines_fn(path.clone())),
         ("metadata", metadata_fn(path)),
     ];
-    dict(entries)
+    object(entries)
 }
 
 fn write_fn(path: Rc<str>) -> Value {
@@ -132,7 +132,7 @@ fn metadata_fn(path: Rc<str>) -> Value {
                     (Value::String("is_file".into()), Value::Bool(m.is_file())),
                     (Value::String("is_dir".into()), Value::Bool(m.is_dir())),
                 ];
-                ok(Value::Dict(entries))
+                ok(Value::Object(entries))
             }
             Err(e) => err(e.to_string()),
         })

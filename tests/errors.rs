@@ -47,7 +47,7 @@ fn list_index_out_of_range() {
 }
 
 #[test]
-fn dict_missing_key() {
+fn object_missing_key() {
     let msg = eval_err(r#"{"a": 1}.b"#);
     assert!(msg.contains("no key"), "got: {}", msg);
 }

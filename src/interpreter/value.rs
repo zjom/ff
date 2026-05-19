@@ -41,7 +41,7 @@ pub enum Value {
     // `:name` — Elixir-style atom. Equal iff names match; prints as `:name`.
     Atom(Rc<str>),
     List(Vector<Value>),
-    Dict(Vector<(Value, Value)>),
+    Object(Vector<(Value, Value)>),
     Set(Vector<Value>),
     // Lazy integer-step range. `end == None` is infinite (`[start..]`);
     // `inclusive` distinguishes `[a..b]` from `[a..=b]`. Step is always +1.
@@ -94,7 +94,7 @@ pub fn type_name(v: &Value) -> &'static str {
         Value::Bool(_) => "bool",
         Value::Atom(_) => "atom",
         Value::List(_) => "list",
-        Value::Dict(_) => "dict",
+        Value::Object(_) => "object",
         Value::Set(_) => "set",
         Value::Range { .. } => "range",
         Value::Cons { .. } => "cons",
@@ -125,7 +125,7 @@ fn value_eq(a: &Value, b: &Value) -> bool {
         (Value::List(x), Value::List(y)) => {
             x.len() == y.len() && x.iter().zip(y).all(|(a, b)| value_eq(a, b))
         }
-        (Value::Dict(x), Value::Dict(y)) => {
+        (Value::Object(x), Value::Object(y)) => {
             x.len() == y.len()
                 && x.iter()
                     .all(|(k, v)| y.iter().any(|(k2, v2)| value_eq(k, k2) && value_eq(v, v2)))
@@ -166,8 +166,8 @@ impl core::cmp::PartialEq for Value {
 /// Force a Cons spine into a flat Vec of its elements. Returns None if a thunk
 /// fails to evaluate, or if the terminator type has no natural sequence
 /// (number, bool, function, etc.). Strings flatten to one-char string values,
-/// dicts to `[k, v]` pairs, ranges to numbers, so cross-type equality like
-/// `take(3, "hel") == "hel"` and `cons-built-dict == literal-dict` works.
+/// maps to `[k, v]` pairs, ranges to numbers, so cross-type equality like
+/// `take(3, "hel") == "hel"` and `cons-built-object == literal-object` works.
 fn flatten_cons(v: &Value) -> Option<Vec<Value>> {
     let (mut items, mut cur_tail) = match v {
         Value::Cons { head, tail } => (vec![(**head).clone()], tail.clone()),
@@ -175,7 +175,7 @@ fn flatten_cons(v: &Value) -> Option<Vec<Value>> {
             return Some(xs.iter().cloned().collect());
         }
         Value::String(s) => return Some(string_chars(s)),
-        Value::Dict(es) => return Some(es.iter().map(|(k, v)| pair(k, v)).collect()),
+        Value::Object(es) => return Some(es.iter().map(|(k, v)| pair(k, v)).collect()),
         Value::Range {
             start,
             end,
@@ -201,7 +201,7 @@ fn flatten_cons(v: &Value) -> Option<Vec<Value>> {
                 items.extend(string_chars(&s));
                 return Some(items);
             }
-            Value::Dict(es) => {
+            Value::Object(es) => {
                 items.extend(es.iter().map(|(k, v)| pair(k, v)));
                 return Some(items);
             }
@@ -258,7 +258,7 @@ impl std::fmt::Display for Value {
                 }
                 write!(f, "]")
             }
-            Value::Dict(es) => {
+            Value::Object(es) => {
                 write!(f, "{{")?;
                 for (i, (k, v)) in es.iter().enumerate() {
                     if i > 0 {
@@ -301,7 +301,7 @@ impl std::fmt::Display for Value {
 }
 
 /// Walk a Cons spine, forcing thunks as we go, then print in the shape of the
-/// terminator. A spine ending in a set prints with `{...}`, in a dict with
+/// terminator. A spine ending in a set prints with `{...}`, in a object with
 /// `{k: v, ...}`, in a string with `"..."`, etc. — this is what makes
 /// `take(3, "hello")` display as `"hel"` and `take(2, {"a":1,"b":2})` as
 /// `{"a": 1, "b": 2}`. Infinite ranges show their open-end marker without
@@ -340,12 +340,12 @@ fn fmt_cons(
             }
             write!(f, "}}")
         }
-        Value::Dict(es) => {
+        Value::Object(es) => {
             write!(f, "{{")?;
             let mut first = true;
             for x in &items {
                 let Some((k, v)) = pair_of(x) else {
-                    return write!(f, "<bad dict cons cell: {}>", x);
+                    return write!(f, "<bad object cons cell: {}>", x);
                 };
                 if !first {
                     write!(f, ", ")?;

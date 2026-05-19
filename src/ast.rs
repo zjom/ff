@@ -32,7 +32,7 @@ pub enum Expr {
     Atom(String),
     Ident(String),
     List(Vec<Expr>),
-    Dict(Vec<(Expr, Expr)>),
+    Object(Vec<(Expr, Expr)>),
     Set(Vec<Expr>),
     Function {
         params: Vec<String>,
@@ -90,11 +90,11 @@ pub enum Pattern {
     Bool(bool),
     Atom(String),
     List(Vec<PatternItem>),
-    Dict(Vec<(Expr, Pattern)>),
+    Object(Vec<(Expr, Pattern)>),
     Set(Vec<Pattern>),
     // `head ++ tail`. Type-polymorphic destructuring: splits off the first
     // element of any value the `++` operator can build (list, string, set,
-    // dict). Right-associative — `a ++ b ++ rest` nests as `Cons(a, Cons(b, rest))`.
+    // yes). Right-associative — `a ++ b ++ rest` nests as `Cons(a, Cons(b, rest))`.
     Cons {
         head: Box<Pattern>,
         tail: Box<Pattern>,
@@ -111,7 +111,7 @@ pub enum PatternItem {
 pub enum AccessKey {
     Index(usize),
     Field(String),
-    // `dict.:foo` — look up the atom key `:foo`.
+    // `object.:foo` — look up the atom key `:foo`.
     Atom(String),
 }
 

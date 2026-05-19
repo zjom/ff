@@ -89,7 +89,7 @@ fn single_expr_parens_still_grouping() {
 }
 
 #[test]
-fn dict_unaffected() {
+fn object_unaffected() {
     assert_eq!(eval(r#"{"a": 1, "b": 2}"#), r#"{"a": 1, "b": 2}"#);
 }
 

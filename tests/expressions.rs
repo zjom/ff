@@ -163,7 +163,7 @@ fn atom_in_collections() {
 }
 
 #[test]
-fn dot_atom_dict_access() {
+fn dot_atom_object_access() {
     assert_eq!(eval("{:a: 1, :b: 2}.:a"), "1");
     assert_eq!(eval("{:ok: 42}.:ok"), "42");
     // Atom-keyed and string-keyed entries are distinct.

@@ -293,16 +293,21 @@ M.cube(3)                # 27
 ```
 
 
-## actors
+## concurrency
 
-`import "Actor"` exposes an Erlang/Elixir-style actor runtime. An actor is just
-an object with atom-keyed callbacks: `:init`, `:handle_request`, `:handle_notify`.
+ff has an actor based concurrency model inspired by erlang.
+
+actors are sequential "processes" that communicate via message passing
+(see [Communicating Sequential Processes](https://www.cs.cmu.edu/~crary/819-f09/Hoare78.pdf)).
+
+an actor is just an object with atom-keyed callbacks: `:init`, `:handle_request`, `:handle_notify`.
+`Actor.request` and `Actor.notify` are equivalent to erlang's `call` and `cast` respectively.
+
 Each actor processes its mailbox strictly in order; concurrency comes from
 interleaving many actors.
 
-```ff
-Actor = import "Actor"
 
+```ff
 handle_request = (msg, n) => match msg
   :get -> [n, n]                       # [reply, new_state]
 handle_notify = (msg, n) => match msg

@@ -1,7 +1,7 @@
 use crate::members;
 use std::collections::HashMap;
 
-use crate::{interop::native_fn, interpreter::Value};
+use crate::interpreter::Value;
 
 members! {
     "Env",

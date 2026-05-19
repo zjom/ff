@@ -32,7 +32,9 @@ assert = args => (
     [val,msg] -> [val,msg],
     val -> [val, "assert failed"]
 
-  if val != default(val) then val else panic msg
-  )
+  if val != default(val)
+  then val
+  else panic msg
+)
 
 export (|>), (<<), (>>), map, filter, take, rev, reduce, fold, assert

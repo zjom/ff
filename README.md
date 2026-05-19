@@ -39,6 +39,13 @@ true && !false     # true
 # `.` indexes lists by position and atom-keyed objects by name
 [10, 20, 30].0           # 10
 {:x: {:y: 7}}.x.y        # 7
+
+# use the `Object` module to access object with other keys
+squares = {1: 1, 2: 4, 4: 16}
+Object.get squares 2         # 4
+Object.put squares 5 25      # {1: 1, 2: 4, 4: 16, 5: 25}
+# you can use cons to prepend to objects
+[6, 36] :: squares           # {6: 36, 1: 1, 2: 4, 4: 16}
 ```
 
 Layouts are forgiving: commas and newlines are interchangeable inside `[]`,

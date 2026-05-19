@@ -122,6 +122,24 @@ sign = match
   _          -> "pos"
 ```
 
+
+## optional arguments and variadic functions
+
+optional arguments and variadic functions are not supported at the language level.
+it is trivial to implement on your own via pattern matching on a list.
+
+for example, the stdlib `assert` function takes an optional `msg` and is implemented as
+
+```ff
+assert = args => (
+  [val, msg] = match args
+    [val,msg] -> [val,msg],
+    val -> [val, "assert failed"]
+
+  if val != default(val) then val else panic msg
+  )
+```
+
 ## blocks and control flow
 
 Parentheses with multiple statements form a block. The value of the last

@@ -1,6 +1,8 @@
-use im::Vector;
+use im::{HashMap, HashSet, Vector};
 use rug::Rational;
 use std::cell::RefCell;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
 use crate::ast::{Expr, Pattern};
@@ -41,8 +43,8 @@ pub enum Value {
     // `:name` — Elixir-style atom. Equal iff names match; prints as `:name`.
     Atom(Rc<str>),
     List(Vector<Value>),
-    Object(Vector<(Value, Value)>),
-    Set(Vector<Value>),
+    Object(HashMap<Value, Value>),
+    Set(HashSet<Value>),
     // Lazy integer-step range. `end == None` is infinite (`[start..]`);
     // `inclusive` distinguishes `[a..b]` from `[a..=b]`. Step is always +1.
     Range {
@@ -120,14 +122,8 @@ fn value_eq(a: &Value, b: &Value) -> bool {
         (Value::List(x), Value::List(y)) => {
             x.len() == y.len() && x.iter().zip(y).all(|(a, b)| value_eq(a, b))
         }
-        (Value::Object(x), Value::Object(y)) => {
-            x.len() == y.len()
-                && x.iter()
-                    .all(|(k, v)| y.iter().any(|(k2, v2)| value_eq(k, k2) && value_eq(v, v2)))
-        }
-        (Value::Set(x), Value::Set(y)) => {
-            x.len() == y.len() && x.iter().all(|a| y.iter().any(|b| value_eq(a, b)))
-        }
+        (Value::Object(x), Value::Object(y)) => x == y,
+        (Value::Set(x), Value::Set(y)) => x == y,
         (
             Value::Range {
                 start: s1,
@@ -158,6 +154,74 @@ impl core::cmp::PartialEq for Value {
     }
 }
 
+impl core::cmp::Eq for Value {}
+
+impl Hash for Value {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            Value::Unit => {}
+            Value::Number(n) => n.to_string().hash(state),
+            Value::String(s) => s.hash(state),
+            Value::Bool(b) => b.hash(state),
+            Value::Atom(name) => name.hash(state),
+            Value::List(xs) => {
+                xs.len().hash(state);
+                for x in xs {
+                    x.hash(state);
+                }
+            }
+            // Set/Object iteration order isn't fixed by im, so XOR per-element
+            // hashes to get an order-independent (still equality-compatible)
+            // hash.
+            Value::Set(xs) => {
+                let mut h: u64 = 0;
+                for x in xs {
+                    let mut hasher = DefaultHasher::new();
+                    x.hash(&mut hasher);
+                    h ^= hasher.finish();
+                }
+                state.write_u64(h);
+            }
+            Value::Object(es) => {
+                let mut h: u64 = 0;
+                for (k, v) in es {
+                    let mut hasher = DefaultHasher::new();
+                    k.hash(&mut hasher);
+                    v.hash(&mut hasher);
+                    h ^= hasher.finish();
+                }
+                state.write_u64(h);
+            }
+            Value::Range {
+                start,
+                end,
+                inclusive,
+            } => {
+                start.to_string().hash(state);
+                match end {
+                    None => 0u8.hash(state),
+                    Some(e) => {
+                        1u8.hash(state);
+                        e.to_string().hash(state);
+                    }
+                }
+                inclusive.hash(state);
+            }
+            // Tail is lazy — only fold the eager head in. Cons cells don't
+            // typically live inside hashed collections; if they do, two cells
+            // with the same head will collide but PartialEq will still keep
+            // them distinct.
+            Value::Cons { head, .. } => head.hash(state),
+            // Functions/Natives aren't reflexive under PartialEq (function ==
+            // function is always false). Hashing by name/discriminant alone is
+            // a best-effort placeholder; using them as keys is unsupported.
+            Value::Function { .. } => {}
+            Value::Native { name, .. } => name.hash(state),
+        }
+    }
+}
+
 /// Force a Cons spine into a flat Vec of its elements. Returns None if a thunk
 /// fails to evaluate, or if the terminator type has no natural sequence
 /// (number, bool, function, etc.). Strings flatten to one-char string values,
@@ -166,9 +230,8 @@ impl core::cmp::PartialEq for Value {
 fn flatten_cons(v: &Value) -> Option<Vec<Value>> {
     let (mut items, mut cur_tail) = match v {
         Value::Cons { head, tail } => (vec![(**head).clone()], tail.clone()),
-        Value::List(xs) | Value::Set(xs) => {
-            return Some(xs.iter().cloned().collect());
-        }
+        Value::List(xs) => return Some(xs.iter().cloned().collect()),
+        Value::Set(xs) => return Some(xs.iter().cloned().collect()),
         Value::String(s) => return Some(string_chars(s)),
         Value::Object(es) => return Some(es.iter().map(|(k, v)| pair(k, v)).collect()),
         Value::Range {
@@ -188,7 +251,11 @@ fn flatten_cons(v: &Value) -> Option<Vec<Value>> {
                 items.push((*head).clone());
                 cur_tail = tail;
             }
-            Value::List(xs) | Value::Set(xs) => {
+            Value::List(xs) => {
+                items.extend(xs.iter().cloned());
+                return Some(items);
+            }
+            Value::Set(xs) => {
                 items.extend(xs.iter().cloned());
                 return Some(items);
             }
@@ -254,8 +321,13 @@ impl std::fmt::Display for Value {
                 write!(f, "]")
             }
             Value::Object(es) => {
+                let mut entries: Vec<(String, String)> = es
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect();
+                entries.sort_by(|a, b| a.0.cmp(&b.0));
                 write!(f, "{{")?;
-                for (i, (k, v)) in es.iter().enumerate() {
+                for (i, (k, v)) in entries.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
@@ -264,8 +336,10 @@ impl std::fmt::Display for Value {
                 write!(f, "}}")
             }
             Value::Set(xs) => {
+                let mut items: Vec<String> = xs.iter().map(|x| x.to_string()).collect();
+                items.sort();
                 write!(f, "{{")?;
-                for (i, x) in xs.iter().enumerate() {
+                for (i, x) in items.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
@@ -370,36 +444,39 @@ fn fmt_cons(
 
     match &terminator {
         Value::Set(xs) => {
+            let mut strs: Vec<String> = items
+                .iter()
+                .chain(xs.iter())
+                .map(|x| x.to_string())
+                .collect();
+            strs.sort();
             write!(f, "{{")?;
-            let mut first = true;
-            for x in items.iter().chain(xs.iter()) {
-                if !first {
+            for (i, s) in strs.iter().enumerate() {
+                if i > 0 {
                     write!(f, ", ")?;
                 }
-                write!(f, "{}", x)?;
-                first = false;
+                write!(f, "{}", s)?;
             }
             write!(f, "}}")
         }
         Value::Object(es) => {
-            write!(f, "{{")?;
-            let mut first = true;
+            let mut entries: Vec<(String, String)> = Vec::new();
             for x in &items {
                 let Some((k, v)) = pair_of(x) else {
                     return write!(f, "<bad object cons cell: {}>", x);
                 };
-                if !first {
-                    write!(f, ", ")?;
-                }
-                write!(f, "{}: {}", k, v)?;
-                first = false;
+                entries.push((k.to_string(), v.to_string()));
             }
             for (k, v) in es {
-                if !first {
+                entries.push((k.to_string(), v.to_string()));
+            }
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            write!(f, "{{")?;
+            for (i, (k, v)) in entries.iter().enumerate() {
+                if i > 0 {
                     write!(f, ", ")?;
                 }
                 write!(f, "{}: {}", k, v)?;
-                first = false;
             }
             write!(f, "}}")
         }

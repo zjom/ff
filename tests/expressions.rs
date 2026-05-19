@@ -159,7 +159,8 @@ fn atom_in_collections() {
     assert_eq!(eval("[:a, :b, :c]"), "[:a, :b, :c]");
     assert_eq!(eval("[:ok, 1]"), "[:ok, 1]");
     assert_eq!(eval("{:a, :b, :a}"), "{:a, :b}");
-    assert_eq!(eval("{:ok: 1, :error: 2}"), "{:ok: 1, :error: 2}");
+    // Objects are unordered; display sorts entries by key.
+    assert_eq!(eval("{:ok: 1, :error: 2}"), "{:error: 2, :ok: 1}");
 }
 
 #[test]

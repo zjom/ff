@@ -183,27 +183,29 @@ t"#
 
 #[test]
 fn cons_pattern_set_destructure() {
-    assert_eq!(eval("h :: t = {1, 2, 3}\nh"), "1");
-    assert_eq!(eval("h :: t = {1, 2, 3}\nt"), "{2, 3}");
+    // Sets are unordered, so the cons-pattern peels an arbitrary element. Test
+    // by peeling every element and summing — order-independent.
+    assert_eq!(eval("a :: b :: c :: _ = {1, 2, 3}\na + b + c"), "6");
 }
 
 #[test]
 fn cons_pattern_object_destructure() {
-    // Head is the first entry as a [key, value] list — the inverse of how
-    // `::` prepends a `[k, v]` pair onto a object.
+    // Single-entry object: the peeled head is deterministic — a [k, v] pair.
     assert_eq!(
         eval(
-            r#"h :: t = {"a": 1, "b": 2}
+            r#"h :: t = {"a": 1}
 h"#
         ),
         r#"["a", 1]"#
     );
+    // Multi-entry object: peel both entries (order arbitrary) and sum the
+    // values to verify each `[k, v]` pair was a real entry.
     assert_eq!(
         eval(
-            r#"h :: t = {"a": 1, "b": 2}
-t"#
+            r#"[_, v1] :: [_, v2] :: _ = {"a": 1, "b": 2}
+v1 + v2"#
         ),
-        r#"{"b": 2}"#
+        "3"
     );
 }
 

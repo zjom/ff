@@ -5,7 +5,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::rc::Rc;
 
-use im::{Vector, vector};
+use im::{HashMap, Vector};
 use rug::Rational;
 
 use crate::interpreter::{LazyState, RuntimeError, RuntimeResult, Value, type_name};
@@ -131,14 +131,13 @@ fn metadata_fn(path: Rc<str>) -> Value {
     native!("file.metadata", 0, move |_env, _args| {
         Ok(match fs::metadata(&*path) {
             Ok(m) => {
-                let entries = vector![
-                    (
-                        Value::String("size".into()),
-                        Value::Number(Rc::new(Rational::from(m.len()))),
-                    ),
-                    (Value::String("is_file".into()), Value::Bool(m.is_file())),
-                    (Value::String("is_dir".into()), Value::Bool(m.is_dir())),
-                ];
+                let mut entries: HashMap<Value, Value> = HashMap::new();
+                entries.insert(
+                    Value::String("size".into()),
+                    Value::Number(Rc::new(Rational::from(m.len()))),
+                );
+                entries.insert(Value::String("is_file".into()), Value::Bool(m.is_file()));
+                entries.insert(Value::String("is_dir".into()), Value::Bool(m.is_dir()));
                 ok(Value::Object(entries))
             }
             Err(e) => err(e.to_string()),

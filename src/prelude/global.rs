@@ -1,4 +1,4 @@
-use im::Vector;
+use im::{HashMap, HashSet, Vector};
 use rug::Rational;
 
 use crate::interpreter::{RuntimeError, Value, ctx_of, type_name};
@@ -33,18 +33,13 @@ fn cons() -> Value {
             }
 
             (v, Value::Set(mut xs)) => {
-                if xs.iter().any(|x| &v == x) {
-                    Ok(Value::Set(xs))
-                } else {
-                    xs.push_back(v);
-                    Ok(Value::Set(xs))
-                }
+                xs.insert(v);
+                Ok(Value::Set(xs))
             }
             (Value::List(kvs), Value::Object(mut xs)) => {
                 if kvs.len() == 2 {
                     let (key, value) = (kvs[0].clone(), kvs[1].clone());
-                    xs.retain(|(k, _)| k != &key);
-                    xs.push_back((key, value));
+                    xs.insert(key, value);
                     Ok(Value::Object(xs))
                 } else {
                     Err(RuntimeError::UnsupportedOperation(
@@ -69,8 +64,8 @@ fn default() -> Value {
             Value::String(_) => Value::String("".into()),
             Value::Bool(_) => Value::Bool(false),
             Value::List(_) => Value::List(Vector::new()),
-            Value::Object(_) => Value::Object(Vector::new()),
-            Value::Set(_) => Value::Set(Vector::new()),
+            Value::Object(_) => Value::Object(HashMap::new()),
+            Value::Set(_) => Value::Set(HashSet::new()),
             Value::Range { .. } => Value::Range {
                 start: Rational::new().into(),
                 end: Some(Rational::new().into()),

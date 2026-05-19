@@ -1,4 +1,4 @@
-use im::Vector;
+use im::{HashMap, HashSet};
 use rug::Rational;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -155,9 +155,9 @@ fn eval_statement(stmt: &Statement, env: &Env) -> RuntimeResult<Value> {
         Statement::Expr(Expr::Import(path)) => {
             let val = eval_expr(&Expr::Import(path.clone()), env)?;
             if let Value::Object(entries) = val {
-                for (k, v) in entries {
+                for (k, v) in entries.iter() {
                     if let Value::Atom(name) = k {
-                        define(env, &name, v);
+                        define(env, name, v.clone());
                     }
                 }
             }
@@ -184,25 +184,19 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> RuntimeResult<Value> {
                 .collect::<RuntimeResult<_>>()?,
         )),
         Expr::Object(entries) => {
-            let mut out: Vector<(Value, Value)> = Vector::new();
+            let mut out: HashMap<Value, Value> = HashMap::new();
             for (k, v) in entries {
                 let kv = eval_expr(k, env)?;
                 let vv = eval_expr(v, env)?;
-                if let Some(idx) = out.iter().position(|(ek, _)| ek == &kv) {
-                    out.set(idx, (kv, vv));
-                } else {
-                    out.push_back((kv, vv));
-                }
+                out.insert(kv, vv);
             }
             Ok(Value::Object(out))
         }
         Expr::Set(items) => {
-            let mut out: Vector<Value> = Vector::new();
+            let mut out: HashSet<Value> = HashSet::new();
             for e in items {
                 let v = eval_expr(e, env)?;
-                if !out.iter().any(|x| x == &v) {
-                    out.push_back(v);
-                }
+                out.insert(v);
             }
             Ok(Value::Set(out))
         }
@@ -291,9 +285,8 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> RuntimeResult<Value> {
                 }
                 (Value::Object(es), AccessKey::Name(name)) => {
                     let k = Value::Atom(name.as_str().into());
-                    es.iter()
-                        .find(|(ek, _)| ek == &k)
-                        .map(|(_, v)| v.clone())
+                    es.get(&k)
+                        .cloned()
                         .ok_or_else(|| RuntimeError::ObjectMissingKey(name.clone()))
                 }
                 (v, AccessKey::Index(_)) => Err(RuntimeError::CannotIndex(type_name(v))),

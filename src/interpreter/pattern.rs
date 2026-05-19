@@ -53,7 +53,7 @@ fn match_into(
             Value::Object(d) => {
                 for (key_expr, sub_pat) in entries {
                     let key = eval_expr(key_expr, env)?;
-                    let Some((_, found)) = d.iter().find(|(k, _)| k == &key) else {
+                    let Some(found) = d.get(&key) else {
                         return Ok(false);
                     };
                     if !match_into(sub_pat, found, env, bindings)? {
@@ -83,8 +83,21 @@ fn match_into(
         // first element (and rebuild the tail in the same shape) for any value
         // type the operator can construct.
         Pattern::Cons { head, tail } => match val {
-            Value::List(xs) => match_cons_seq(head, tail, xs, env, bindings, Value::List),
-            Value::Set(xs) => match_cons_seq(head, tail, xs, env, bindings, Value::Set),
+            Value::List(xs) => match_cons_list(head, tail, xs, env, bindings),
+            // Sets are unordered; pull an arbitrary element via iter().next().
+            // The choice is deterministic for any given HashSet but isn't
+            // insertion order.
+            Value::Set(xs) => {
+                let Some(h) = xs.iter().next().cloned() else {
+                    return Ok(false);
+                };
+                if !match_into(head, &h, env, bindings)? {
+                    return Ok(false);
+                }
+                let mut rest = xs.clone();
+                rest.remove(&h);
+                match_into(tail, &Value::Set(rest), env, bindings)
+            }
             Value::String(s) => {
                 let Some(first) = s.chars().next() else {
                     return Ok(false);
@@ -96,8 +109,9 @@ fn match_into(
                 }
                 match_into(tail, &t, env, bindings)
             }
+            // Objects are unordered; pull an arbitrary entry as a [k, v] pair.
             Value::Object(es) => {
-                let Some((k, v)) = es.front() else {
+                let Some((k, v)) = es.iter().next().map(|(k, v)| (k.clone(), v.clone())) else {
                     return Ok(false);
                 };
                 let h = Value::List(im::vector![k.clone(), v.clone()]);
@@ -105,7 +119,7 @@ fn match_into(
                     return Ok(false);
                 }
                 let mut rest = es.clone();
-                rest.pop_front();
+                rest.remove(&k);
                 match_into(tail, &Value::Object(rest), env, bindings)
             }
             Value::Range {
@@ -219,13 +233,12 @@ fn match_seq_range(
     }
 }
 
-fn match_cons_seq(
+fn match_cons_list(
     head: &Pattern,
     tail: &Pattern,
     xs: &Vector<Value>,
     env: &Env,
     bindings: &mut HashMap<String, Value>,
-    rewrap: impl FnOnce(Vector<Value>) -> Value,
 ) -> RuntimeResult<bool> {
     let Some(h) = xs.front() else {
         return Ok(false);
@@ -235,7 +248,7 @@ fn match_cons_seq(
     }
     let mut rest = xs.clone();
     rest.pop_front();
-    match_into(tail, &rewrap(rest), env, bindings)
+    match_into(tail, &Value::List(rest), env, bindings)
 }
 
 fn match_seq(

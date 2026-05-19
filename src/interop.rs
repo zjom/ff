@@ -89,19 +89,20 @@ fn value_to_json(v: Value) -> RuntimeResult<Json> {
                 .collect::<RuntimeResult<_>>()?,
         ),
         Value::Set(xs) => Json::Array(
-            xs.into_iter()
+            xs.iter()
+                .cloned()
                 .map(value_to_json)
                 .collect::<RuntimeResult<_>>()?,
         ),
         Value::Object(entries) => {
             let mut obj = serde_json::Map::new();
-            for (k, v) in entries {
+            for (k, v) in entries.iter() {
                 let key = match k {
                     Value::String(s) => s.to_string(),
                     Value::Atom(s) => s.to_string(),
                     other => return Err(RuntimeError::NonStringObjectKey(other.to_string())),
                 };
-                obj.insert(key, value_to_json(v)?);
+                obj.insert(key, value_to_json(v.clone())?);
             }
             Json::Object(obj)
         }

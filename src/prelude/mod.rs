@@ -2,7 +2,7 @@ use crate::interpreter::{
     Env, RuntimeError, RuntimeResult, Scope, Value, ctx_of, define, eval_program,
 };
 use crate::parser::parse;
-use im::{Vector, vector};
+use im::{HashMap, vector};
 use std::path::PathBuf;
 
 mod fs;
@@ -57,9 +57,9 @@ pub(crate) fn native_module(name: &str) -> Option<Value> {
 }
 
 fn object_with_atom_keys(entries: impl IntoIterator<Item = (String, Value)>) -> Value {
-    let mut out: Vector<(Value, Value)> = Vector::new();
+    let mut out: HashMap<Value, Value> = HashMap::new();
     for (k, v) in entries {
-        out.push_back((Value::Atom(k.into()), v));
+        out.insert(Value::Atom(k.into()), v);
     }
     Value::Object(out)
 }

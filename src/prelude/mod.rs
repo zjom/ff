@@ -4,6 +4,7 @@ use crate::interpreter::{
 use crate::parser::parse;
 use std::path::PathBuf;
 
+mod env;
 mod fs;
 mod global;
 mod object;
@@ -31,6 +32,7 @@ pub fn native_module(name: &str) -> Option<Value> {
     let members = match name {
         "Fs" => fs::members(),
         "Object" => object::members(),
+        "Env" => env::members(),
         _ => return None,
     };
     Some(object_with_atom_keys(

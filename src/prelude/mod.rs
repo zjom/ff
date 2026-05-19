@@ -12,6 +12,7 @@ mod http;
 mod io;
 mod json;
 mod object;
+mod string;
 mod utils;
 use utils::*;
 
@@ -72,6 +73,7 @@ fn native_module(name: &str) -> Option<Value> {
         "Io" => io::members(),
         "Http" => http::members(),
         "Json" => json::members(),
+        "String" => string::members(),
         _ => return None,
     };
     Some(object(members.into_iter().map(|(k, v)| (k.to_string(), v))))

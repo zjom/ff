@@ -19,3 +19,17 @@ pub(super) fn object(entries: impl IntoIterator<Item = (impl Into<Rc<str>>, Valu
     }
     Value::Object(out)
 }
+
+#[macro_export]
+macro_rules! members {
+    ($module:literal, $($name:ident => $body:expr),* $(,)?) => {
+        pub fn members() -> Vec<(&'static str, Value)> {
+            vec![$(
+                (
+                    stringify!($name),
+                    native_fn(concat!($module, ".", stringify!($name)), $body),
+                ),
+            )*]
+        }
+    };
+}

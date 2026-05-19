@@ -13,11 +13,17 @@ use crate::interpreter::{LazyState, RuntimeError, RuntimeResult, Value, type_nam
 use crate::native;
 
 pub fn members() -> Vec<(&'static str, Value)> {
-    vec![("open", open_file())]
+    vec![("open", open_file()), ("exists", exists())]
+}
+
+fn exists() -> Value {
+    native_fn("exists", move |path: String| -> FfResult<bool> {
+        fs::exists(path).into()
+    })
 }
 
 fn open_file() -> Value {
-    native!("open", 1, |_env, args| {
+    native!("open", 1, move |_env, args| {
         let Value::String(path) = &args[0] else {
             return Err(RuntimeError::NativeTypeError {
                 native: "open_file",

@@ -15,7 +15,7 @@ fn get() -> Value {
         if let Value::Object(obj) = &args[0] {
             match obj.get(&args[1]) {
                 Some(value) => Ok(value.clone()),
-                None => Err(RuntimeError::ObjectMissingKey(format!("{}", args[0]))),
+                None => Ok(Value::Unit),
             }
         } else {
             Err(RuntimeError::UnsupportedOperation(format!(

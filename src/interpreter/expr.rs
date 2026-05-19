@@ -1,7 +1,6 @@
 use im::{HashMap, HashSet};
 use rug::Rational;
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::ast::{AccessKey, ExportKind, Expr, Program, Statement, UnaryOp};
 
@@ -11,23 +10,23 @@ use super::pattern::match_pattern;
 use super::scope::{Env, Scope, ctx_of, define, lookup};
 use super::value::{LazyState, Value, type_name};
 
-/// Force a lazy thunk to a concrete value. Memoizes via the shared RefCell so
+/// Force a lazy thunk to a concrete value. Memoizes via the shared Mutex so
 /// re-forcing is cheap. Used by pattern matching, equality, display, and the
 /// `force_cons` helper that walks a stream's spine.
-pub fn force_tail(tail: &Rc<RefCell<LazyState>>) -> RuntimeResult<Value> {
-    if let LazyState::Forced(v) = &*tail.borrow() {
+pub fn force_tail(tail: &Arc<Mutex<LazyState>>) -> RuntimeResult<Value> {
+    if let LazyState::Forced(v) = &*tail.lock().unwrap() {
         return Ok(v.clone());
     }
-    let pending = std::mem::replace(&mut *tail.borrow_mut(), LazyState::Forced(Value::Unit));
+    let pending = std::mem::replace(&mut *tail.lock().unwrap(), LazyState::Forced(Value::Unit));
     let v = match pending {
         LazyState::Pending { body, env } => eval_expr(&body, &env)?,
         LazyState::Native(thunk) => thunk()?,
         LazyState::Forced(v) => {
-            *tail.borrow_mut() = LazyState::Forced(v.clone());
+            *tail.lock().unwrap() = LazyState::Forced(v.clone());
             return Ok(v);
         }
     };
-    *tail.borrow_mut() = LazyState::Forced(v.clone());
+    *tail.lock().unwrap() = LazyState::Forced(v.clone());
     Ok(v)
 }
 
@@ -126,7 +125,7 @@ fn eval_statement(stmt: &Statement, env: &Env) -> RuntimeResult<Value> {
         }
         Statement::Export(kind) => {
             let ctx = ctx_of(env);
-            let mut exports_slot = ctx.current_exports.borrow_mut();
+            let mut exports_slot = ctx.current_exports.lock().unwrap();
             // Top-level scripts have no exports table; `export` is a no-op
             // there so a module file can still be run directly.
             let Some(table) = exports_slot.as_mut() else {
@@ -134,7 +133,7 @@ fn eval_statement(stmt: &Statement, env: &Env) -> RuntimeResult<Value> {
             };
             match kind {
                 ExportKind::All => {
-                    for (k, v) in env.borrow().vars.iter() {
+                    for (k, v) in env.lock().unwrap().vars.iter() {
                         upsert_export(table, k.clone(), v.clone());
                     }
                 }
@@ -170,7 +169,7 @@ fn eval_statement(stmt: &Statement, env: &Env) -> RuntimeResult<Value> {
 pub fn eval_expr(expr: &Expr, env: &Env) -> RuntimeResult<Value> {
     match expr {
         Expr::Unit => Ok(Value::Unit),
-        Expr::Number(n) => Ok(Value::Number(Rc::new(n.clone()))),
+        Expr::Number(n) => Ok(Value::Number(Arc::new(n.clone()))),
         Expr::String(s) => Ok(Value::String(s.as_str().into())),
         Expr::Bool(b) => Ok(Value::Bool(*b)),
         Expr::Atom(name) => Ok(Value::Atom(name.as_str().into())),
@@ -300,7 +299,7 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> RuntimeResult<Value> {
             let v = eval_expr(operand, env)?;
             match (op, v) {
                 (UnaryOp::Neg, Value::Number(n)) => {
-                    Ok(Value::Number(Rc::new(Rational::from(-n.as_ref()))))
+                    Ok(Value::Number(Arc::new(Rational::from(-n.as_ref()))))
                 }
                 (UnaryOp::Not, Value::Bool(b)) => Ok(Value::Bool(!b)),
                 (op, v) => Err(RuntimeError::UnaryTypeError {

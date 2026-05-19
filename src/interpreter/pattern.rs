@@ -1,7 +1,7 @@
 use im::Vector;
 use rug::Rational;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::ast::{Pattern, PatternItem};
 
@@ -103,7 +103,7 @@ fn match_into(
                     return Ok(false);
                 };
                 let h = Value::String(first.to_string().into());
-                let t = Value::String(Rc::from(&s[first.len_utf8()..]));
+                let t = Value::String(Arc::from(&s[first.len_utf8()..]));
                 if !match_into(head, &h, env, bindings)? {
                     return Ok(false);
                 }
@@ -135,7 +135,7 @@ fn match_into(
                     return Ok(false);
                 }
                 let t = Value::Range {
-                    start: Rc::new(rat_succ(start)),
+                    start: Arc::new(rat_succ(start)),
                     end: end.clone(),
                     inclusive: *inclusive,
                 };
@@ -163,7 +163,7 @@ fn match_into(
 
 fn match_seq_range(
     items: &[PatternItem],
-    start: &Rc<Rational>,
+    start: &Arc<Rational>,
     end: Option<&Rational>,
     inclusive: bool,
     env: &Env,
@@ -182,7 +182,7 @@ fn match_seq_range(
                 if !range_has_elem(&cur, end, inclusive) {
                     return Ok(false);
                 }
-                let elem = Value::Number(Rc::new(cur.clone()));
+                let elem = Value::Number(Arc::new(cur.clone()));
                 if !match_into(p, &elem, env, bindings)? {
                     return Ok(false);
                 }
@@ -212,7 +212,7 @@ fn match_seq_range(
                 if !range_has_elem(&cur, end, inclusive) {
                     return Ok(false);
                 }
-                let elem = Value::Number(Rc::new(cur.clone()));
+                let elem = Value::Number(Arc::new(cur.clone()));
                 if !match_into(p, &elem, env, bindings)? {
                     return Ok(false);
                 }
@@ -222,8 +222,8 @@ fn match_seq_range(
                 bindings.insert(
                     name.clone(),
                     Value::Range {
-                        start: Rc::new(cur),
-                        end: end.map(|e| Rc::new(e.clone())),
+                        start: Arc::new(cur),
+                        end: end.map(|e| Arc::new(e.clone())),
                         inclusive,
                     },
                 );

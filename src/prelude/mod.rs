@@ -20,9 +20,9 @@ pub fn install(env: &Env) {
     let program = parse(include_str!("stdlib.ff")).expect("failed to parse stdlib.ff");
     let ctx = ctx_of(env);
     let module_env = Scope::child(env.clone());
-    let prev_exports = ctx.current_exports.replace(Some(Vec::new()));
+    let prev_exports = (*ctx.current_exports.lock().unwrap()).replace(Vec::new());
     let result = eval_program(&program, &module_env);
-    let exports = ctx.current_exports.replace(prev_exports);
+    let exports = std::mem::replace(&mut *ctx.current_exports.lock().unwrap(), prev_exports);
     result.expect("failed to evaluate stdlib.ff");
     for (name, value) in exports.unwrap_or_default() {
         define(env, &name, value);
@@ -38,7 +38,7 @@ pub fn import_module(env: &Env, path_str: &str) -> RuntimeResult<Value> {
         return Ok(m);
     }
     let ctx = ctx_of(env);
-    let resolved = match ctx.current_file.borrow().as_ref() {
+    let resolved = match ctx.current_file.lock().unwrap().as_ref() {
         Some(p) => p
             .parent()
             .map(|d| d.join(path_str))
@@ -51,11 +51,11 @@ pub fn import_module(env: &Env, path_str: &str) -> RuntimeResult<Value> {
     })?;
     let program = parse(&source).map_err(|e| RuntimeError::Parse(e.to_string()))?;
     let module_env = Scope::child(env.clone());
-    let prev_file = ctx.current_file.replace(Some(resolved));
-    let prev_exports = ctx.current_exports.replace(Some(Vec::new()));
+    let prev_file = (*ctx.current_file.lock().unwrap()).replace(resolved);
+    let prev_exports = (*ctx.current_exports.lock().unwrap()).replace(Vec::new());
     let result = eval_program(&program, &module_env);
-    let exports = ctx.current_exports.replace(prev_exports);
-    *ctx.current_file.borrow_mut() = prev_file;
+    let exports = std::mem::replace(&mut *ctx.current_exports.lock().unwrap(), prev_exports);
+    *ctx.current_file.lock().unwrap() = prev_file;
     result?;
     Ok(object(exports.unwrap_or_default()))
 }

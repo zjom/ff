@@ -74,7 +74,7 @@
 //! [`native_fn`] (for the simple cases) with [`native!`](crate::native) (for `file.lines`,
 //! which returns a lazy stream).
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use im::vector;
 use rug::{Integer, Rational};
@@ -190,7 +190,7 @@ macro_rules! native {
             name: $name,
             arity: $arity,
             applied: Vec::new(),
-            f: $crate::interpreter::NativeFn(std::rc::Rc::new($body)),
+            f: $crate::interpreter::NativeFn(std::sync::Arc::new($body)),
         }
     };
 }
@@ -324,7 +324,7 @@ fn json_to_value(j: Json) -> Value {
     match j {
         Json::Null => Value::Unit,
         Json::Bool(b) => Value::Bool(b),
-        Json::Number(n) => Value::Number(Rc::new(json_number_to_rational(&n))),
+        Json::Number(n) => Value::Number(Arc::new(json_number_to_rational(&n))),
         Json::String(s) => match s.strip_prefix(':') {
             Some(rest) => Value::Atom(rest.into()),
             None => Value::String(s.into()),
@@ -410,7 +410,7 @@ macro_rules! impl_into_native {
     ($n:expr; $($i:tt: $t:ident),*) => {
         impl<F, R, $($t,)*> IntoNative<($($t,)*)> for F
         where
-            F: Fn($($t),*) -> R + 'static,
+            F: Fn($($t),*) -> R + Send + Sync + 'static,
             $($t: DeserializeOwned,)*
             R: Serialize,
         {
@@ -419,7 +419,7 @@ macro_rules! impl_into_native {
                     name,
                     arity: $n,
                     applied: Vec::new(),
-                    f: NativeFn(Rc::new(move |_env, _args: &[Value]| {
+                    f: NativeFn(Arc::new(move |_env, _args: &[Value]| {
                         let ret = (self)($(
                             from_value(_args[$i].clone())?,
                         )*);

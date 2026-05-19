@@ -1,25 +1,28 @@
-//! Erlang/Elixir-style actor runtime.
+//! Erlang/Elixir-style actor runtime, backed by tokio.
 //!
-//! An *actor* is an ff `Object` whose atom-keyed fields are callbacks:
-//! `:init`, `:handle_call`, `:handle_cast`. The runtime spawns one per
-//! `Actor.spawn` call, hands it a mailbox, and drains messages by invoking
-//! the relevant callback via [`apply`].
+//! Each `Actor.spawn` parks an actor on its own `tokio::task::spawn_blocking`
+//! task. The actor's mailbox is an `mpsc::UnboundedSender`; messages drive a
+//! synchronous loop that invokes `:handle_call` / `:handle_cast` callbacks via
+//! [`apply`]. `Actor.call` synchronously waits on a `oneshot::Receiver` for
+//! the reply.
 //!
-//! The scheduler is **cooperative and single-threaded** — there is no
-//! parallelism. "Concurrent" here means many actors interleaved on one OS
-//! thread: each actor processes its own mailbox strictly in order, but the
-//! global order between actors is determined by which `cast`/`call` site
-//! drives the scheduler. This matches BEAM's per-actor semantics (no mid-
-//! handler preemption) while sacrificing BEAM's parallel scheduling.
+//! Unlike the previous cooperative-single-threaded scheduler, this runtime is
+//! genuinely parallel: independent actors run on independent OS threads from
+//! tokio's blocking pool. Per-actor message ordering is still strict (one
+//! handler at a time per actor).
 //!
-//! Reentrancy: while an actor's handler is on the Rust stack its
-//! `processing` flag is set; any attempt to `call` into a processing actor
-//! returns `:deadlock` rather than blocking forever.
+//! Self-deadlock detection: `Actor.call(self, _)` from inside a handler is
+//! recognised via a thread-local current pid and rejected with
+//! `[:error, :self_deadlock]` rather than blocking the handler thread
+//! forever.
 
-use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque};
+use std::cell::Cell;
+use std::collections::HashMap;
 use std::io::Write;
-use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+
+use tokio::sync::{mpsc, oneshot};
 
 use super::error::{RuntimeError, RuntimeResult};
 use super::expr::apply;
@@ -32,34 +35,28 @@ pub enum ActorMsg {
     Cast(Value),
     Call {
         msg: Value,
-        reply: Rc<RefCell<Option<CallReply>>>,
+        reply: oneshot::Sender<CallReply>,
     },
     Stop,
 }
 
-#[derive(Clone)]
+#[derive(Debug)]
 pub enum CallReply {
     Ok(Value),
-    Err(Rc<str>),
+    Err(Arc<str>),
 }
 
-pub struct Actor {
-    pub pid: Pid,
-    pub template: Value,
-    pub state: Value,
-    pub mailbox: VecDeque<ActorMsg>,
-    pub alive: bool,
-    // True while a handler frame for this actor is on the Rust stack. Used
-    // both to gate re-enqueue (an actor handling a message must not be in
-    // `ready` simultaneously) and to detect synchronous `call`-cycles.
-    pub processing: bool,
+struct ActorHandle {
+    sender: mpsc::UnboundedSender<ActorMsg>,
+    alive: Arc<AtomicBool>,
 }
+
+type ActorMap = Arc<Mutex<HashMap<Pid, Arc<ActorHandle>>>>;
 
 pub struct Runtime {
-    next_pid: Pid,
-    actors: HashMap<Pid, Rc<RefCell<Actor>>>,
-    ready: VecDeque<Pid>,
-    current: Option<Pid>,
+    next_pid: AtomicU64,
+    actors: ActorMap,
+    tokio: Arc<tokio::runtime::Runtime>,
 }
 
 impl Default for Runtime {
@@ -70,23 +67,54 @@ impl Default for Runtime {
 
 impl Runtime {
     pub fn new() -> Self {
+        // Each `Ctx` owns a tokio runtime. Dropping the `Runtime` (via the
+        // `Ctx` going out of scope at end-of-script or end-of-test) calls
+        // `shutdown_background` so any actors still running don't block the
+        // drop on the caller's thread.
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("failed to build tokio runtime");
         Self {
-            next_pid: 1,
-            actors: HashMap::new(),
-            ready: VecDeque::new(),
-            current: None,
+            next_pid: AtomicU64::new(1),
+            actors: Arc::new(Mutex::new(HashMap::new())),
+            tokio: Arc::new(rt),
         }
     }
 
-    fn mint_pid(&mut self) -> Pid {
-        let p = self.next_pid;
-        self.next_pid += 1;
-        p
+    fn mint_pid(&self) -> Pid {
+        self.next_pid.fetch_add(1, Ordering::SeqCst)
     }
+}
 
-    fn get(&self, pid: Pid) -> Option<Rc<RefCell<Actor>>> {
-        self.actors.get(&pid).cloned()
+impl Drop for Runtime {
+    fn drop(&mut self) {
+        // Dropping the senders signals every actor's `blocking_recv` to wake
+        // and exit, freeing the blocking pool threads. The Arc<Runtime> may
+        // still be held elsewhere; either way, when the tokio runtime is
+        // finally dropped, `shutdown_background` keeps the caller unblocked.
+        if let Ok(mut actors) = self.actors.lock() {
+            actors.clear();
+        }
     }
+}
+
+thread_local! {
+    // Set for the lifetime of each actor's blocking task (and temporarily
+    // during `init` so `Actor.self()` works there). Used for the
+    // self-deadlock guard and `Actor.self()`.
+    static CURRENT_PID: Cell<Option<Pid>> = const { Cell::new(None) };
+}
+
+fn with_current_pid<R>(pid: Option<Pid>, f: impl FnOnce() -> R) -> R {
+    let prev = CURRENT_PID.with(|c| c.replace(pid));
+    let r = f();
+    CURRENT_PID.with(|c| c.set(prev));
+    r
+}
+
+pub fn current_pid(_env: &Env) -> Option<Pid> {
+    CURRENT_PID.with(|c| c.get())
 }
 
 fn lookup_cb(template: &Value, name: &str) -> Option<Value> {
@@ -96,9 +124,19 @@ fn lookup_cb(template: &Value, name: &str) -> Option<Value> {
     es.get(&Value::Atom(name.into())).cloned()
 }
 
-/// Spawn a new actor from an Object template. Runs `:init` (if present) on
-/// the spawner's stack so init errors propagate as a spawn failure rather
-/// than crashing the new process silently.
+fn runtime_snapshot(env: &Env) -> (ActorMap, tokio::runtime::Handle) {
+    let ctx = ctx_of(env);
+    let rt = ctx.runtime.lock().unwrap();
+    (rt.actors.clone(), rt.tokio.handle().clone())
+}
+
+fn lookup_actor(actors: &ActorMap, pid: Pid) -> Option<Arc<ActorHandle>> {
+    actors.lock().unwrap().get(&pid).cloned()
+}
+
+/// Spawn a new actor from an Object template. Runs `:init` inline on the
+/// caller's thread (with `CURRENT_PID` temporarily pointing at the new pid)
+/// so an init failure surfaces as a spawn error rather than a silent crash.
 pub fn spawn(env: &Env, template: Value) -> RuntimeResult<Value> {
     if !matches!(template, Value::Object(_)) {
         return Err(RuntimeError::NativeTypeError {
@@ -108,212 +146,153 @@ pub fn spawn(env: &Env, template: Value) -> RuntimeResult<Value> {
         });
     }
 
-    let ctx = ctx_of(env);
-    let pid = ctx.runtime.borrow_mut().mint_pid();
+    let pid = {
+        let ctx = ctx_of(env);
+        let rt = ctx.runtime.lock().unwrap();
+        rt.mint_pid()
+    };
 
-    let init_cb = lookup_cb(&template, "init");
-    let state = if let Some(init_fn) = init_cb {
-        let prev = {
-            let mut rt = ctx.runtime.borrow_mut();
-            let p = rt.current;
-            rt.current = Some(pid);
-            p
-        };
-        let result = apply(env, init_fn, vec![]);
-        ctx.runtime.borrow_mut().current = prev;
-        result?
+    let state = if let Some(init_fn) = lookup_cb(&template, "init") {
+        with_current_pid(Some(pid), || apply(env, init_fn, vec![]))?
     } else {
         Value::Unit
     };
 
-    let actor = Actor {
-        pid,
-        template,
-        state,
-        mailbox: VecDeque::new(),
-        alive: true,
-        processing: false,
-    };
-    ctx.runtime
-        .borrow_mut()
-        .actors
-        .insert(pid, Rc::new(RefCell::new(actor)));
+    let (tx, mut rx) = mpsc::unbounded_channel::<ActorMsg>();
+    let alive = Arc::new(AtomicBool::new(true));
+    let handle = Arc::new(ActorHandle {
+        sender: tx,
+        alive: alive.clone(),
+    });
+
+    let (actors, tokio_handle) = runtime_snapshot(env);
+    actors.lock().unwrap().insert(pid, handle);
+
+    // Each actor lives on its own blocking task. The task captures a clone of
+    // the spawning env so it can dispatch handlers via `apply`. Closures inside
+    // the template already carry their own captured env; the cloned env here
+    // is only used so the `&Env` arg to `apply` is valid for natives that look
+    // up `ctx`.
+    let env_for_task = env.clone();
+    let ctx_for_task = ctx_of(env);
+    let template_for_task = template.clone();
+    let actors_for_task = actors.clone();
+
+    tokio_handle.spawn_blocking(move || {
+        CURRENT_PID.with(|c| c.set(Some(pid)));
+        let mut state = state;
+        while let Some(msg) = rx.blocking_recv() {
+            if !alive.load(Ordering::SeqCst) {
+                break;
+            }
+            match msg {
+                ActorMsg::Cast(m) => match invoke_cast(&env_for_task, &template_for_task, m, state.clone()) {
+                    Ok(new_state) => state = new_state,
+                    Err(e) => {
+                        let _ = writeln!(
+                            ctx_for_task.out.lock().unwrap(),
+                            "[actor #PID<{}> crashed: {}]",
+                            pid,
+                            e
+                        );
+                        alive.store(false, Ordering::SeqCst);
+                        break;
+                    }
+                },
+                ActorMsg::Call { msg: m, reply } => {
+                    match invoke_call(&env_for_task, &template_for_task, m, state.clone()) {
+                        Ok((reply_val, new_state)) => {
+                            state = new_state;
+                            let _ = reply.send(CallReply::Ok(reply_val));
+                        }
+                        Err(e) => {
+                            let _ = reply.send(CallReply::Err(
+                                format!("handler crashed: {}", e).into(),
+                            ));
+                            alive.store(false, Ordering::SeqCst);
+                            break;
+                        }
+                    }
+                }
+                ActorMsg::Stop => {
+                    alive.store(false, Ordering::SeqCst);
+                    break;
+                }
+            }
+        }
+        // Remove the actor handle so future `call`s see :no_proc.
+        if let Ok(mut map) = actors_for_task.lock() {
+            map.remove(&pid);
+        }
+        CURRENT_PID.with(|c| c.set(None));
+    });
+
     Ok(Value::Pid(pid))
 }
 
-/// Fire-and-forget message. Dead/unknown pids drop silently (Erlang semantics).
-/// Drains the scheduler before returning so casts produce visible effects in
-/// scripts that don't otherwise drive the runtime.
 pub fn cast(env: &Env, pid: Pid, msg: Value) {
-    let ctx = ctx_of(env);
-    let actor_rc = ctx.runtime.borrow().get(pid);
-    let Some(actor_rc) = actor_rc else { return };
-    if !actor_rc.borrow().alive {
+    let (actors, _) = runtime_snapshot(env);
+    let Some(handle) = lookup_actor(&actors, pid) else {
+        return;
+    };
+    if !handle.alive.load(Ordering::SeqCst) {
         return;
     }
-    actor_rc.borrow_mut().mailbox.push_back(ActorMsg::Cast(msg));
-    enqueue_if_idle(&ctx.runtime, &actor_rc, pid);
-    drain_all(env);
+    let _ = handle.sender.send(ActorMsg::Cast(msg));
 }
 
-/// Synchronous request. On a single thread we can't truly block; instead we
-/// loop the scheduler until the reply slot fills or the queue empties.
-/// Returns `:no_proc` for unknown/dead targets, `:deadlock`/`:self_deadlock`
-/// when the target is already on the Rust call stack.
 pub fn call(env: &Env, pid: Pid, msg: Value) -> CallReply {
-    let ctx = ctx_of(env);
-    let actor_rc = ctx.runtime.borrow().get(pid);
-    let Some(actor_rc) = actor_rc else {
+    if CURRENT_PID.with(|c| c.get()) == Some(pid) {
+        return CallReply::Err(":self_deadlock".into());
+    }
+    let (actors, _) = runtime_snapshot(env);
+    let Some(handle) = lookup_actor(&actors, pid) else {
         return CallReply::Err(":no_proc".into());
     };
-    if !actor_rc.borrow().alive {
+    if !handle.alive.load(Ordering::SeqCst) {
         return CallReply::Err(":no_proc".into());
     }
-    if actor_rc.borrow().processing {
-        let kind = if ctx.runtime.borrow().current == Some(pid) {
-            ":self_deadlock"
-        } else {
-            ":deadlock"
-        };
-        return CallReply::Err(kind.into());
-    }
 
-    let slot = Rc::new(RefCell::new(None::<CallReply>));
-    actor_rc.borrow_mut().mailbox.push_back(ActorMsg::Call {
-        msg,
-        reply: slot.clone(),
-    });
-    enqueue_if_idle(&ctx.runtime, &actor_rc, pid);
-    drain_until(env, &slot);
-    let reply = slot.borrow().clone();
-    reply.unwrap_or(CallReply::Err(":no_proc".into()))
+    let (reply_tx, reply_rx) = oneshot::channel();
+    if handle
+        .sender
+        .send(ActorMsg::Call {
+            msg,
+            reply: reply_tx,
+        })
+        .is_err()
+    {
+        return CallReply::Err(":no_proc".into());
+    }
+    match reply_rx.blocking_recv() {
+        Ok(r) => r,
+        Err(_) => CallReply::Err(":no_proc".into()),
+    }
 }
 
 pub fn alive(env: &Env, pid: Pid) -> bool {
-    let ctx = ctx_of(env);
-    ctx.runtime
-        .borrow()
-        .get(pid)
-        .map(|a| a.borrow().alive)
+    let (actors, _) = runtime_snapshot(env);
+    lookup_actor(&actors, pid)
+        .map(|h| h.alive.load(Ordering::SeqCst))
         .unwrap_or(false)
 }
 
 pub fn stop(env: &Env, pid: Pid) {
-    let ctx = ctx_of(env);
-    if let Some(a) = ctx.runtime.borrow().get(pid) {
-        let mut a = a.borrow_mut();
-        a.alive = false;
-        a.mailbox.clear();
+    let (actors, _) = runtime_snapshot(env);
+    if let Some(handle) = lookup_actor(&actors, pid) {
+        handle.alive.store(false, Ordering::SeqCst);
+        let _ = handle.sender.send(ActorMsg::Stop);
     }
 }
 
-pub fn current_pid(env: &Env) -> Option<Pid> {
-    ctx_of(env).runtime.borrow().current
-}
-
-pub fn drain_all(env: &Env) {
-    while step_one(env) {}
-}
-
-fn drain_until(env: &Env, slot: &Rc<RefCell<Option<CallReply>>>) {
-    while slot.borrow().is_none() {
-        if !step_one(env) {
-            break;
-        }
-    }
-}
-
-fn enqueue_if_idle(runtime: &RefCell<Runtime>, actor_rc: &Rc<RefCell<Actor>>, pid: Pid) {
-    if actor_rc.borrow().processing {
-        return;
-    }
-    let mut rt = runtime.borrow_mut();
-    if !rt.ready.contains(&pid) {
-        rt.ready.push_back(pid);
-    }
-}
-
-/// Single scheduler tick: pop one ready actor, deliver one message, return.
-/// Returns false if the ready queue was empty (caller should stop looping).
-fn step_one(env: &Env) -> bool {
-    let ctx = ctx_of(env);
-
-    let pid = match ctx.runtime.borrow_mut().ready.pop_front() {
-        Some(p) => p,
-        None => return false,
-    };
-
-    let actor_rc = match ctx.runtime.borrow().get(pid) {
-        Some(a) => a,
-        None => return true,
-    };
-
-    if !actor_rc.borrow().alive {
-        return true;
-    }
-
-    let msg = actor_rc.borrow_mut().mailbox.pop_front();
-    let Some(msg) = msg else { return true };
-
-    actor_rc.borrow_mut().processing = true;
-    let prev_current = {
-        let mut rt = ctx.runtime.borrow_mut();
-        let p = rt.current;
-        rt.current = Some(pid);
-        p
-    };
-
-    let (template, state) = {
-        let a = actor_rc.borrow();
-        (a.template.clone(), a.state.clone())
-    };
-
-    match msg {
-        ActorMsg::Cast(m) => match invoke_cast(env, &template, m, state) {
-            Ok(new_state) => actor_rc.borrow_mut().state = new_state,
-            Err(e) => {
-                let _ = writeln!(
-                    ctx.out.borrow_mut(),
-                    "[actor #PID<{}> crashed: {}]",
-                    pid,
-                    e
-                );
-                actor_rc.borrow_mut().alive = false;
-            }
-        },
-        ActorMsg::Call { msg: m, reply } => match invoke_call(env, &template, m, state) {
-            Ok((reply_val, new_state)) => {
-                actor_rc.borrow_mut().state = new_state;
-                *reply.borrow_mut() = Some(CallReply::Ok(reply_val));
-            }
-            Err(e) => {
-                actor_rc.borrow_mut().alive = false;
-                *reply.borrow_mut() =
-                    Some(CallReply::Err(format!("handler crashed: {}", e).into()));
-            }
-        },
-        ActorMsg::Stop => actor_rc.borrow_mut().alive = false,
-    }
-
-    ctx.runtime.borrow_mut().current = prev_current;
-    actor_rc.borrow_mut().processing = false;
-
-    let still_busy = {
-        let a = actor_rc.borrow();
-        a.alive && !a.mailbox.is_empty()
-    };
-    if still_busy {
-        ctx.runtime.borrow_mut().ready.push_back(pid);
-    }
-    true
-}
+/// No-op under the parallel runtime: messages drain on their own as tokio
+/// schedules the actor tasks. Retained so existing scripts compile.
+pub fn drain_all(_env: &Env) {}
 
 fn invoke_cast(env: &Env, template: &Value, msg: Value, state: Value) -> RuntimeResult<Value> {
     let Some(cb) = lookup_cb(template, "handle_cast") else {
         return Ok(state);
     };
-    // ff multi-param functions are curried at parse time, so dispatch is two
-    // unary `apply`s rather than one with `vec![msg, state]`.
     let intermediate = apply(env, cb, vec![msg])?;
     apply(env, intermediate, vec![state])
 }

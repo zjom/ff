@@ -1,5 +1,5 @@
 use im::vector;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::interpreter::runtime::{self, CallReply, Pid};
 use crate::interpreter::{RuntimeError, Value, type_name};
@@ -31,7 +31,7 @@ fn err_atom(tag: &str) -> Value {
     ])
 }
 
-fn err_msg(msg: impl Into<Rc<str>>) -> Value {
+fn err_msg(msg: impl Into<Arc<str>>) -> Value {
     Value::List(vector![
         Value::Atom("error".into()),
         Value::String(msg.into()),

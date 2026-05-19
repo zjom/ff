@@ -1,9 +1,8 @@
 use im::{HashMap, HashSet, Vector};
 use rug::Rational;
-use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::ast::{Expr, Pattern};
 
@@ -16,8 +15,9 @@ pub enum LazyState {
     Forced(Value),
     // A native-built thunk. Used by stdlib streams (e.g. `file.lines`) that
     // can't be expressed as an AST expression because they carry Rust state
-    // like an open `BufReader`.
-    Native(Box<dyn FnOnce() -> RuntimeResult<Value>>),
+    // like an open `BufReader`. `Send` so a Cons spine can cross thread
+    // boundaries between actors.
+    Native(Box<dyn FnOnce() -> RuntimeResult<Value> + Send>),
 }
 
 impl std::fmt::Debug for LazyState {
@@ -37,19 +37,19 @@ impl std::fmt::Debug for LazyState {
 #[derive(Debug, Clone)]
 pub enum Value {
     Unit,
-    Number(Rc<Rational>),
-    String(Rc<str>),
+    Number(Arc<Rational>),
+    String(Arc<str>),
     Bool(bool),
     // `:name` — Elixir-style atom. Equal iff names match; prints as `:name`.
-    Atom(Rc<str>),
+    Atom(Arc<str>),
     List(Vector<Value>),
     Object(HashMap<Value, Value>),
     Set(HashSet<Value>),
     // Lazy integer-step range. `end == None` is infinite (`[start..]`);
     // `inclusive` distinguishes `[a..b]` from `[a..=b]`. Step is always +1.
     Range {
-        start: Rc<Rational>,
-        end: Option<Rc<Rational>>,
+        start: Arc<Rational>,
+        end: Option<Arc<Rational>>,
         inclusive: bool,
     },
     // Lazy cons cell. Built by the `a :: b` binary expression: `head` is
@@ -57,8 +57,8 @@ pub enum Value {
     // (pattern-match, display, equality). This is what lets recursive
     // stdlib builders like `f(x) :: map(f, rest)` terminate.
     Cons {
-        head: Rc<Value>,
-        tail: Rc<RefCell<LazyState>>,
+        head: Arc<Value>,
+        tail: Arc<Mutex<LazyState>>,
     },
     Function {
         params: Vec<Pattern>,
@@ -77,7 +77,7 @@ pub enum Value {
     Pid(u64),
 }
 
-pub type NativeFunction = Rc<dyn Fn(&Env, &[Value]) -> RuntimeResult<Value>>;
+pub type NativeFunction = Arc<dyn Fn(&Env, &[Value]) -> RuntimeResult<Value> + Send + Sync>;
 
 #[derive(Clone)]
 pub struct NativeFn(pub NativeFunction);
@@ -303,7 +303,7 @@ fn range_elems(start: &Rational, end: &Rational, inclusive: bool) -> Vec<Value> 
     let mut out = Vec::new();
     let mut cur: Rational = start.clone();
     while super::number::range_has_elem(&cur, Some(end), inclusive) {
-        out.push(Value::Number(Rc::new(cur.clone())));
+        out.push(Value::Number(Arc::new(cur.clone())));
         cur += 1;
     }
     out
@@ -431,8 +431,8 @@ pub fn format_pattern(p: &Pattern) -> String {
 /// forcing further; forcing errors surface as `<error: ...>`.
 fn fmt_cons(
     f: &mut std::fmt::Formatter<'_>,
-    head: &Rc<Value>,
-    tail: &Rc<RefCell<LazyState>>,
+    head: &Arc<Value>,
+    tail: &Arc<Mutex<LazyState>>,
 ) -> std::fmt::Result {
     let mut items: Vec<Value> = vec![(**head).clone()];
     let mut cur_tail = tail.clone();

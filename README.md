@@ -322,18 +322,20 @@ Actor.call(pid, :get)                  # [:ok, 12]
 ```
 
 Primitives: `Actor.spawn`, `Actor.cast`, `Actor.call`, `Actor.self`,
-`Actor.alive`, `Actor.stop`, `Actor.run_until_idle`. `cast` returns `()`
-immediately; `call` blocks the calling actor (or top-level code) until the
-target replies. Synchronous `call` cycles are detected and surface as
-`[:error, :self_deadlock]` or `[:error, :deadlock]` rather than recursing
-forever; calls to a dead or unknown pid return `[:error, :no_proc]`. A handler
-that raises kills its actor and surfaces a `[:error, "handler crashed: ..."]`
-to the caller without aborting the script.
+`Actor.alive`, `Actor.stop`. `cast` returns `()` immediately; `call` blocks
+the calling actor (or top-level code) until the target replies.
+`Actor.self(self_pid)` from inside a handler is detected as `:self_deadlock`
+and surfaces as `[:error, :self_deadlock]` rather than blocking forever;
+calls to a dead or unknown pid return `[:error, :no_proc]`. A handler that
+raises kills its actor and surfaces `[:error, "handler crashed: ..."]` to
+the caller without aborting the script.
 
-The scheduler is cooperative and single-threaded — actors don't run in
-parallel. Each `cast`/`call` drains the ready queue before returning; if you
-spawn actors and exit without further messaging them, end the script with
-`Actor.run_until_idle()` to flush remaining mail.
+Actors run on a tokio multi-thread runtime: each spawn parks the actor on
+its own blocking task, so independent actors progress in parallel on
+different OS threads. Per-actor ordering is still strict (one handler at a
+time, mailbox is FIFO via `tokio::sync::mpsc`). Synchronous `call` is
+implemented via a `tokio::sync::oneshot` reply channel that the caller
+blocks on until the target's handler returns.
 
 
 ## working with rust

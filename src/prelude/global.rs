@@ -100,9 +100,9 @@ fn print() -> Value {
         let s = &args[0].to_string();
         let ctx = ctx_of(env);
         if ctx.is_interactive {
-            writeln!(ctx_of(env).out.borrow_mut(), "{}", s)?;
+            writeln!(ctx_of(env).out.lock().unwrap(), "{}", s)?;
         } else {
-            write!(ctx_of(env).out.borrow_mut(), "{}", s)?;
+            write!(ctx_of(env).out.lock().unwrap(), "{}", s)?;
         }
         Ok(Value::Unit)
     })
@@ -110,7 +110,7 @@ fn print() -> Value {
 fn println() -> Value {
     native!("io.println", 1, |env, args| {
         let s = &args[0].to_string();
-        writeln!(ctx_of(env).out.borrow_mut(), "{}", s)?;
+        writeln!(ctx_of(env).out.lock().unwrap(), "{}", s)?;
         Ok(Value::Unit)
     })
 }

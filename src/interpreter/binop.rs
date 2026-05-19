@@ -1,6 +1,5 @@
 use rug::Rational;
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::ast::{BinaryOp, Expr};
 
@@ -21,12 +20,12 @@ pub(super) fn eval_binary(
     // don't bottom out before pattern-matching the tail.
     if matches!(op, BinaryOp::Cons) {
         let head = eval_expr(lhs, env)?;
-        let tail = Rc::new(RefCell::new(LazyState::Pending {
+        let tail = Arc::new(Mutex::new(LazyState::Pending {
             body: rhs.clone(),
             env: env.clone(),
         }));
         return Ok(Value::Cons {
-            head: Rc::new(head),
+            head: Arc::new(head),
             tail,
         });
     }
@@ -57,20 +56,20 @@ pub(super) fn eval_binary(
     let l = eval_expr(lhs, env)?;
     let r = eval_expr(rhs, env)?;
     match (op, &l, &r) {
-        (BinaryOp::Add, Value::Number(a), Value::Number(b)) => Ok(Value::Number(Rc::new(
+        (BinaryOp::Add, Value::Number(a), Value::Number(b)) => Ok(Value::Number(Arc::new(
             Rational::from(a.as_ref() + b.as_ref()),
         ))),
-        (BinaryOp::Sub, Value::Number(a), Value::Number(b)) => Ok(Value::Number(Rc::new(
+        (BinaryOp::Sub, Value::Number(a), Value::Number(b)) => Ok(Value::Number(Arc::new(
             Rational::from(a.as_ref() - b.as_ref()),
         ))),
-        (BinaryOp::Mul, Value::Number(a), Value::Number(b)) => Ok(Value::Number(Rc::new(
+        (BinaryOp::Mul, Value::Number(a), Value::Number(b)) => Ok(Value::Number(Arc::new(
             Rational::from(a.as_ref() * b.as_ref()),
         ))),
         (BinaryOp::Div, Value::Number(a), Value::Number(b)) => {
             if b.cmp0() == std::cmp::Ordering::Equal {
                 return Err(RuntimeError::DivisionByZero);
             }
-            Ok(Value::Number(Rc::new(Rational::from(
+            Ok(Value::Number(Arc::new(Rational::from(
                 a.as_ref() / b.as_ref(),
             ))))
         }
@@ -78,10 +77,10 @@ pub(super) fn eval_binary(
             if b.cmp0() == std::cmp::Ordering::Equal {
                 return Err(RuntimeError::ModuloByZero);
             }
-            Ok(Value::Number(Rc::new(rat_mod(a, b))))
+            Ok(Value::Number(Arc::new(rat_mod(a, b))))
         }
         (BinaryOp::Pow, Value::Number(a), Value::Number(b)) => {
-            Ok(Value::Number(Rc::new(rat_pow(a, b)?)))
+            Ok(Value::Number(Arc::new(rat_pow(a, b)?)))
         }
         (BinaryOp::Add, Value::String(a), Value::String(b)) => {
             Ok(Value::String(format!("{}{}", a, b).into()))

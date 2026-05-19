@@ -1,10 +1,9 @@
 use crate::interop::{FfResult, native_fn};
 use crate::prelude::{err, object, ok};
-use std::cell::RefCell;
+use std::sync::{Arc, Mutex};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
-use std::rc::Rc;
 
 use im::Vector;
 use serde::Serialize;
@@ -38,7 +37,7 @@ fn open_file() -> Value {
     })
 }
 
-fn file_object(path: Rc<str>) -> Value {
+fn file_object(path: Arc<str>) -> Value {
     let entries = vec![
         ("path", Value::String(path.clone())),
         ("write", write_fn(path.clone())),
@@ -50,13 +49,13 @@ fn file_object(path: Rc<str>) -> Value {
     object(entries)
 }
 
-fn write_fn(path: Rc<str>) -> Value {
+fn write_fn(path: Arc<str>) -> Value {
     native_fn("file.write", move |data: String| -> FfResult<()> {
         fs::write(&*path, &data).into()
     })
 }
 
-fn append_fn(path: Rc<str>) -> Value {
+fn append_fn(path: Arc<str>) -> Value {
     native_fn("file.append", move |data: String| -> FfResult<()> {
         fs::OpenOptions::new()
             .append(true)
@@ -66,7 +65,7 @@ fn append_fn(path: Rc<str>) -> Value {
     })
 }
 
-fn read_fn(path: Rc<str>) -> Value {
+fn read_fn(path: Arc<str>) -> Value {
     native_fn("file.read", move || -> FfResult<String> {
         fs::read_to_string(&*path).into()
     })
@@ -79,7 +78,7 @@ struct FileMetadata {
     is_dir: bool,
 }
 
-fn metadata_fn(path: Rc<str>) -> Value {
+fn metadata_fn(path: Arc<str>) -> Value {
     native_fn("file.metadata", move || -> FfResult<FileMetadata> {
         fs::metadata(&*path)
             .map(|m| FileMetadata {
@@ -91,7 +90,7 @@ fn metadata_fn(path: Rc<str>) -> Value {
     })
 }
 
-fn lines_fn(path: Rc<str>) -> Value {
+fn lines_fn(path: Arc<str>) -> Value {
     native!("file.lines", 0, move |_env, _args| {
         Ok(match File::open(&*path) {
             Ok(f) => ok(lines_stream(BufReader::new(f))?),
@@ -110,11 +109,11 @@ fn lines_stream(mut reader: BufReader<File>) -> RuntimeResult<Value> {
         Ok(0) => Ok(Value::List(Vector::new())),
         Ok(_) => {
             strip_line_ending(&mut buf);
-            let tail = Rc::new(RefCell::new(LazyState::Native(Box::new(move || {
+            let tail = Arc::new(Mutex::new(LazyState::Native(Box::new(move || {
                 lines_stream(reader)
             }))));
             Ok(Value::Cons {
-                head: Rc::new(Value::String(buf.into())),
+                head: Arc::new(Value::String(buf.into())),
                 tail,
             })
         }

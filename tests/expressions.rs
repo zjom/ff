@@ -111,6 +111,24 @@ fn if_then_else_falsy() {
 }
 
 #[test]
+fn if_multiline_clause_breaks() {
+    let src = "if 3 > 2\nthen \"yes\"\nelse \"no\"";
+    assert_eq!(eval(src), "\"yes\"");
+}
+
+#[test]
+fn if_multiline_after_then_and_else() {
+    let src = "if 1 > 2 then\n  0\nelse\n  -1";
+    assert_eq!(eval(src), "-1");
+}
+
+#[test]
+fn if_multiline_indented_clauses() {
+    let src = "x = if true\n  then 10\n  else 20\nx";
+    assert_eq!(eval(src), "10");
+}
+
+#[test]
 fn assignment_sequence() {
     assert_eq!(eval("x = 10\ny = 20\nx + y"), "30");
 }

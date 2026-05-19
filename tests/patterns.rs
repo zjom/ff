@@ -97,6 +97,26 @@ fn match_missing_comma_is_parse_error() {
 }
 
 #[test]
+fn match_single_line_with_colon() {
+    // `:` delimits the scrutinee from the arms when fitting on one line.
+    assert_eq!(eval("match 1: 0 -> \"zero\", 1 -> \"one\", _ -> \"other\""), "\"one\"");
+}
+
+#[test]
+fn match_single_line_no_scrutinee() {
+    // Without a scrutinee a single-line match desugars to a 1-arg function.
+    assert_eq!(eval("f = match 0 -> \"zero\", _ -> \"other\"\nf(1)"), "\"other\"");
+}
+
+#[test]
+fn match_single_line_with_atom_pattern() {
+    // The `:` delimiter is unambiguous against atom patterns since `:` alone
+    // is not a primary.
+    let src = "match :ok: :ok -> \"yes\", _ -> \"no\"";
+    assert_eq!(eval(src), "\"yes\"");
+}
+
+#[test]
 fn match_pattern_failure_is_runtime_error() {
     // None of the arms match → runtime error (we test the error path elsewhere).
     let src = "match 99\n  0 -> 0,\n  1 -> 1";

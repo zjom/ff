@@ -68,18 +68,3 @@ fn native_module(name: &str) -> Option<Value> {
     };
     Some(object(members.into_iter().map(|(k, v)| (k.to_string(), v))))
 }
-
-// Build a `Value::Native` with the given name, arity, and body. The body is
-// `Fn(&Ctx, &[Value]) -> Result<Value>`; arity-checking and partial application
-// are handled by the interpreter's Call dispatch.
-#[macro_export]
-macro_rules! native {
-    ($name:expr, $arity:expr, $body:expr) => {
-        $crate::interpreter::Value::Native {
-            name: $name,
-            arity: $arity,
-            applied: Vec::new(),
-            f: $crate::interpreter::NativeFn(std::rc::Rc::new($body)),
-        }
-    };
-}

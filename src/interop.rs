@@ -49,6 +49,21 @@ impl<T, E: std::fmt::Display> From<Result<T, E>> for FfResult<T> {
     }
 }
 
+// Build a `Value::Native` with the given name, arity, and body. The body is
+// `Fn(&Ctx, &[Value]) -> Result<Value>`; arity-checking and partial application
+// are handled by the interpreter's Call dispatch.
+#[macro_export]
+macro_rules! native {
+    ($name:expr, $arity:expr, $body:expr) => {
+        $crate::interpreter::Value::Native {
+            name: $name,
+            arity: $arity,
+            applied: Vec::new(),
+            f: $crate::interpreter::NativeFn(std::rc::Rc::new($body)),
+        }
+    };
+}
+
 pub fn to_value<T: Serialize + ?Sized>(t: &T) -> RuntimeResult<Value> {
     let json = serde_json::to_value(t).map_err(|e| RuntimeError::Serialize(e.to_string()))?;
     Ok(json_to_value(json))

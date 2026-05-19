@@ -4,7 +4,6 @@ use common::eval;
 #[test]
 fn spawn_returns_pid() {
     let src = r#"
-Actor = import "Actor"
 counter = {:init: () => 0}
 [:ok, pid] = Actor.spawn(counter)
 typeof(pid)
@@ -15,8 +14,6 @@ typeof(pid)
 #[test]
 fn counter_sanity() {
     let src = r#"
-Actor = import "Actor"
-
 handle_request = (msg, n) => match msg
   :get -> [n, n]
 handle_notify = (msg, n) => match msg
@@ -42,8 +39,6 @@ fn notify_then_request_in_order() {
     // Each notify appends its arg to a list; final request returns the list.
     // Verifies strict per-actor FIFO message processing.
     let src = r#"
-Actor = import "Actor"
-
 handle_request = (msg, state) => match msg
   :get -> [state, state]
 handle_notify = (msg, state) => match msg
@@ -70,8 +65,6 @@ fn nested_request_across_actors() {
     // A.relay forwards a ping to B and returns B's reply unchanged.
     // Verifies that a request from inside a handler nests properly.
     let src = r#"
-Actor = import "Actor"
-
 b_request = (msg, s) => match msg
   :ping -> [:pong, s]
 b = {:init: () => (), :handle_request: b_request}
@@ -93,8 +86,6 @@ Actor.request(a_pid, [:relay, b_pid])
 #[test]
 fn self_request_is_deadlock() {
     let src = r#"
-Actor = import "Actor"
-
 request_handler = (msg, s) => match msg
   :try_self -> (
     [:ok, me] = Actor.self()
@@ -113,7 +104,6 @@ Actor.request(pid, :try_self)
 #[test]
 fn request_dead_pid_returns_no_proc() {
     let src = r#"
-Actor = import "Actor"
 actor = {:init: () => (), :handle_request: (msg, s) => [:ok, s]}
 [:ok, pid] = Actor.spawn(actor)
 Actor.stop(pid)
@@ -125,7 +115,6 @@ Actor.request(pid, :hi)
 #[test]
 fn notify_to_dead_pid_drops_silently() {
     let src = r#"
-Actor = import "Actor"
 actor = {:init: () => (), :handle_request: (msg, s) => [:ok, s]}
 [:ok, pid] = Actor.spawn(actor)
 Actor.stop(pid)
@@ -137,8 +126,6 @@ Actor.notify(pid, :anything)
 #[test]
 fn handler_crash_returns_error_and_kills_actor() {
     let src = r#"
-Actor = import "Actor"
-
 request_handler = (msg, s) => match msg
   :crash -> [1 / 0, s],
   :ping -> [:pong, s]
@@ -154,7 +141,6 @@ Actor.alive(pid)
 #[test]
 fn self_at_top_level_is_not_in_actor() {
     let src = r#"
-Actor = import "Actor"
 Actor.self()
 "#;
     assert_eq!(eval(src), "[:error, :not_in_actor]");
@@ -163,7 +149,6 @@ Actor.self()
 #[test]
 fn pid_equality_by_id() {
     let src = r#"
-Actor = import "Actor"
 actor = {:init: () => ()}
 [:ok, a] = Actor.spawn(actor)
 [:ok, b] = Actor.spawn(actor)
@@ -175,7 +160,6 @@ actor = {:init: () => ()}
 #[test]
 fn missing_request_handler() {
     let src = r#"
-Actor = import "Actor"
 actor = {:init: () => ()}
 [:ok, pid] = Actor.spawn(actor)
 Actor.request(pid, :anything)

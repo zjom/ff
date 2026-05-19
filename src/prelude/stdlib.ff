@@ -38,5 +38,6 @@ assert = args => (
 )
 
 Object = import "Object"
+Actor = import "Actor"
 
-export (|>), (<<), (>>), map, filter, take, rev, reduce, fold, assert, Object
+export (|>), (<<), (>>), map, filter, take, rev, reduce, fold, assert, Object, Actor

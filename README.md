@@ -249,9 +249,9 @@ plus = (+)
 
 ## modules
 
-`import "path.ff"` returns a module value containing whatever the file marked
-`export`. As a bare statement (not the RHS of `=`), an import also splats those
-names into the current scope.
+`import "path.ff"` returns an atom-keyed object containing whatever the file
+marked `export` — a module is just an object. As a bare statement (not the
+RHS of `=`), an import also splats those names into the current scope.
 
 ```ff
 # math.ff

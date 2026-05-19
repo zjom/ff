@@ -9,7 +9,7 @@ use super::value::Value;
 pub struct Ctx {
     pub out: RefCell<Box<dyn Write>>,
     pub current_file: RefCell<Option<PathBuf>>,
-    pub current_exports: RefCell<Option<HashMap<String, Value>>>,
+    pub current_exports: RefCell<Option<Vec<(String, Value)>>>,
     pub is_interactive: bool,
 }
 

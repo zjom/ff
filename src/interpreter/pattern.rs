@@ -62,23 +62,6 @@ fn match_into(
                 }
                 Ok(true)
             }
-            // Object patterns also destructure modules, keyed by member name:
-            // `{Left, Right} = import "lib.ff"`.
-            Value::Module { members, .. } => {
-                for (key_expr, sub_pat) in entries {
-                    let key = eval_expr(key_expr, env)?;
-                    let Value::String(name) = key else {
-                        return Ok(false);
-                    };
-                    let Some(found) = members.get(&*name).cloned() else {
-                        return Ok(false);
-                    };
-                    if !match_into(sub_pat, &found, env, bindings)? {
-                        return Ok(false);
-                    }
-                }
-                Ok(true)
-            }
             _ => Ok(false),
         },
         Pattern::Set(items) => {

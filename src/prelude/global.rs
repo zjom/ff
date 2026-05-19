@@ -79,10 +79,7 @@ fn default() -> Value {
             // A lazy cons cell behaves like a list view; the natural empty is
             // just the empty list.
             Value::Cons { .. } => Value::List(Vector::new()),
-            v @ Value::Atom(_)
-            | v @ Value::Native { .. }
-            | v @ Value::Function { .. }
-            | v @ Value::Module { .. } => {
+            v @ Value::Atom(_) | v @ Value::Native { .. } | v @ Value::Function { .. } => {
                 let t = type_name(v);
                 return Err(RuntimeError::UnsupportedOperation(format!(
                     "default is not supported for {},{},{}",

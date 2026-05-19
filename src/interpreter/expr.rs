@@ -31,6 +31,14 @@ pub fn force_tail(tail: &Rc<RefCell<LazyState>>) -> RuntimeResult<Value> {
     Ok(v)
 }
 
+fn upsert_export(table: &mut Vec<(String, Value)>, name: String, value: Value) {
+    if let Some(slot) = table.iter_mut().find(|(k, _)| *k == name) {
+        slot.1 = value;
+    } else {
+        table.push((name, value));
+    }
+}
+
 pub fn run(program: &Program) -> RuntimeResult<Value> {
     let env = Scope::new();
     crate::prelude::install(&env);
@@ -123,27 +131,30 @@ fn eval_statement(stmt: &Statement, env: &Env) -> RuntimeResult<Value> {
             match kind {
                 ExportKind::All => {
                     for (k, v) in env.borrow().vars.iter() {
-                        table.insert(k.clone(), v.clone());
+                        upsert_export(table, k.clone(), v.clone());
                     }
                 }
                 ExportKind::Names(names) => {
                     for name in names {
                         let v = lookup(env, name)
                             .ok_or_else(|| RuntimeError::ExportUndefined(name.clone()))?;
-                        table.insert(name.clone(), v);
+                        upsert_export(table, name.clone(), v);
                     }
                 }
             }
             Ok(Value::Unit)
         }
-        // Bare `import "x"` statement splats the module's exports into the
-        // current scope. An `import` used as part of a larger expression
-        // (`x = import "x"`, `foo(import "x")`) just produces a Module value.
+        // Bare `import "x"` statement splats the module's atom-keyed members
+        // into the current scope. An `import` used as part of a larger
+        // expression (`x = import "x"`, `foo(import "x")`) just produces the
+        // Object value.
         Statement::Expr(Expr::Import(path)) => {
             let val = eval_expr(&Expr::Import(path.clone()), env)?;
-            if let Value::Module { members, .. } = val {
-                for (k, v) in members {
-                    define(env, &k, v);
+            if let Value::Object(entries) = val {
+                for (k, v) in entries {
+                    if let Value::Atom(name) = k {
+                        define(env, &name, v);
+                    }
                 }
             }
             Ok(Value::Unit)
@@ -281,10 +292,6 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> RuntimeResult<Value> {
                         .map(|(_, v)| v.clone())
                         .ok_or_else(|| RuntimeError::ObjectMissingKey(name.clone()))
                 }
-                (Value::Module { members, .. }, AccessKey::Name(name)) => members
-                    .get(name)
-                    .cloned()
-                    .ok_or_else(|| RuntimeError::ModuleMissingMember(name.clone())),
                 (v, AccessKey::Index(_)) => Err(RuntimeError::CannotIndex(type_name(v))),
                 (v, AccessKey::Name(name)) => Err(RuntimeError::CannotReadAtomField {
                     atom: name.clone(),

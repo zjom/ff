@@ -1,7 +1,6 @@
 use im::Vector;
 use rug::Rational;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::ast::Expr;
@@ -70,10 +69,6 @@ pub enum Value {
         applied: Vec<Value>,
         f: NativeFn,
     },
-    Module {
-        name: String,
-        members: HashMap<String, Value>,
-    },
 }
 
 pub type NativeFunction = Rc<dyn Fn(&Env, &[Value]) -> RuntimeResult<Value>>;
@@ -101,7 +96,6 @@ pub fn type_name(v: &Value) -> &'static str {
         Value::Cons { .. } => "cons",
         Value::Function { .. } => "function",
         Value::Native { .. } => "native",
-        Value::Module { .. } => "module",
     }
 }
 
@@ -296,7 +290,6 @@ impl std::fmt::Display for Value {
             Value::Cons { head, tail } => fmt_cons(f, head, tail),
             Value::Function { params, .. } => write!(f, "<fn ({})>", params.join(", ")),
             Value::Native { name, .. } => write!(f, "<native {}>", name),
-            Value::Module { name, .. } => write!(f, "<module {}>", name),
         }
     }
 }

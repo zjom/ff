@@ -2,8 +2,7 @@ use crate::interpreter::{
     Env, RuntimeError, RuntimeResult, Scope, Value, ctx_of, define, eval_program,
 };
 use crate::parser::parse;
-use im::vector;
-use std::collections::HashMap;
+use im::{Vector, vector};
 use std::path::PathBuf;
 
 mod fs;
@@ -18,7 +17,7 @@ pub fn install(env: &Env) {
     let program = parse(include_str!("stdlib.ff")).expect("failed to parse stdlib.ff");
     let ctx = ctx_of(env);
     let module_env = Scope::child(env.clone());
-    let prev_exports = ctx.current_exports.replace(Some(HashMap::new()));
+    let prev_exports = ctx.current_exports.replace(Some(Vec::new()));
     let result = eval_program(&program, &module_env);
     let exports = ctx.current_exports.replace(prev_exports);
     result.expect("failed to evaluate stdlib.ff");
@@ -52,13 +51,17 @@ pub(crate) fn native_module(name: &str) -> Option<Value> {
         "Object" => object::members(),
         _ => return None,
     };
-    Some(Value::Module {
-        name: name.to_string(),
-        members: members
-            .into_iter()
-            .map(|(k, v)| (k.to_string(), v))
-            .collect::<HashMap<_, _>>(),
-    })
+    Some(object_with_atom_keys(
+        members.into_iter().map(|(k, v)| (k.to_string(), v)),
+    ))
+}
+
+fn object_with_atom_keys(entries: impl IntoIterator<Item = (String, Value)>) -> Value {
+    let mut out: Vector<(Value, Value)> = Vector::new();
+    for (k, v) in entries {
+        out.push_back((Value::Atom(k.into()), v));
+    }
+    Value::Object(out)
 }
 
 /// Resolve and load a module by path. Built-in modules (`io`, etc.) are checked
@@ -82,22 +85,14 @@ pub fn import_module(env: &Env, path_str: &str) -> RuntimeResult<Value> {
         source: e,
     })?;
     let program = parse(&source).map_err(|e| RuntimeError::Parse(e.to_string()))?;
-    let name = resolved
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("module")
-        .to_string();
     let module_env = Scope::child(env.clone());
     let prev_file = ctx.current_file.replace(Some(resolved));
-    let prev_exports = ctx.current_exports.replace(Some(HashMap::new()));
+    let prev_exports = ctx.current_exports.replace(Some(Vec::new()));
     let result = eval_program(&program, &module_env);
     let exports = ctx.current_exports.replace(prev_exports);
     *ctx.current_file.borrow_mut() = prev_file;
     result?;
-    Ok(Value::Module {
-        name,
-        members: exports.unwrap_or_default(),
-    })
+    Ok(object_with_atom_keys(exports.unwrap_or_default()))
 }
 
 // Build a `Value::Native` with the given name, arity, and body. The body is

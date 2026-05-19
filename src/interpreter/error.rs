@@ -67,9 +67,6 @@ pub enum RuntimeError {
     #[error("Object has no key {0}")]
     ObjectMissingKey(String),
 
-    #[error("Module has no member `.{0}`")]
-    ModuleMissingMember(String),
-
     #[error("cannot index into {0}")]
     CannotIndex(&'static str),
 
@@ -158,7 +155,7 @@ pub enum RuntimeError {
     #[error("cannot deserialize lazy values; collect into a List first")]
     LazyDeserialize,
 
-    #[error("cannot deserialize a Function or Module")]
+    #[error("cannot deserialize a Function")]
     FunctionDeserialize,
 
     #[error("cannot represent {0} as a float")]

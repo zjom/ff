@@ -106,7 +106,7 @@ fn value_to_json(v: Value) -> RuntimeResult<Json> {
             Json::Object(obj)
         }
         Value::Range { .. } | Value::Cons { .. } => return Err(RuntimeError::LazyDeserialize),
-        Value::Function { .. } | Value::Native { .. } | Value::Module { .. } => {
+        Value::Function { .. } | Value::Native { .. } => {
             return Err(RuntimeError::FunctionDeserialize);
         }
     })

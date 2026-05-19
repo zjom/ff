@@ -2,8 +2,6 @@ use crate::interop::FfResult;
 use crate::interpreter::Value;
 use crate::members;
 
-// Data is the *last* parameter on every multi-arg function so calls compose
-// naturally under `|>` (e.g. `s |> String.contains(needle)`).
 members! {
     "String",
     len => |s: String| -> usize { s.chars().count() },

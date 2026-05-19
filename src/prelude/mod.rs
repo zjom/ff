@@ -28,16 +28,6 @@ pub fn install(env: &Env) {
     }
 }
 
-pub fn native_module(name: &str) -> Option<Value> {
-    let members = match name {
-        "Fs" => fs::members(),
-        "Object" => object::members(),
-        "Env" => env::members(),
-        _ => return None,
-    };
-    Some(object(members.into_iter().map(|(k, v)| (k.to_string(), v))))
-}
-
 /// Resolve and load a module by path. Built-in modules (`io`, etc.) are checked
 /// first; otherwise the path is resolved relative to the current file and the
 /// source is parsed and evaluated in a fresh child scope. Only names registered
@@ -67,6 +57,16 @@ pub fn import_module(env: &Env, path_str: &str) -> RuntimeResult<Value> {
     *ctx.current_file.borrow_mut() = prev_file;
     result?;
     Ok(object(exports.unwrap_or_default()))
+}
+
+fn native_module(name: &str) -> Option<Value> {
+    let members = match name {
+        "Fs" => fs::members(),
+        "Object" => object::members(),
+        "Env" => env::members(),
+        _ => return None,
+    };
+    Some(object(members.into_iter().map(|(k, v)| (k.to_string(), v))))
 }
 
 // Build a `Value::Native` with the given name, arity, and body. The body is

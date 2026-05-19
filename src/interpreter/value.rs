@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use crate::ast::Expr;
 
+use super::error::RuntimeResult;
 use super::number::format_rational;
 use super::scope::Env;
 
@@ -15,7 +16,7 @@ pub enum LazyState {
     // A native-built thunk. Used by stdlib streams (e.g. `file.lines`) that
     // can't be expressed as an AST expression because they carry Rust state
     // like an open `BufReader`.
-    Native(Box<dyn FnOnce() -> anyhow::Result<Value>>),
+    Native(Box<dyn FnOnce() -> RuntimeResult<Value>>),
 }
 
 impl std::fmt::Debug for LazyState {
@@ -75,7 +76,7 @@ pub enum Value {
     },
 }
 
-pub type NativeFunction = Rc<dyn Fn(&Env, &[Value]) -> anyhow::Result<Value>>;
+pub type NativeFunction = Rc<dyn Fn(&Env, &[Value]) -> RuntimeResult<Value>>;
 
 #[derive(Clone)]
 pub struct NativeFn(pub NativeFunction);

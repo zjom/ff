@@ -7,27 +7,26 @@
 
 use std::rc::Rc;
 
-use anyhow::{Result, anyhow, bail};
 use rug::{Integer, Rational};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Number as JsonNumber, Value as Json};
 
-use crate::interpreter::{Env, NativeFn, Value, define};
+use crate::interpreter::{Env, NativeFn, RuntimeError, RuntimeResult, Value, define};
 
-pub fn to_value<T: Serialize + ?Sized>(t: &T) -> Result<Value> {
-    let json = serde_json::to_value(t).map_err(|e| anyhow!("serialize: {}", e))?;
+pub fn to_value<T: Serialize + ?Sized>(t: &T) -> RuntimeResult<Value> {
+    let json = serde_json::to_value(t).map_err(|e| RuntimeError::Serialize(e.to_string()))?;
     Ok(json_to_value(json))
 }
 
-pub fn from_value<T: DeserializeOwned>(v: Value) -> Result<T> {
+pub fn from_value<T: DeserializeOwned>(v: Value) -> RuntimeResult<T> {
     let json = value_to_json(v)?;
-    serde_json::from_value(json).map_err(|e| anyhow!("deserialize: {}", e))
+    serde_json::from_value(json).map_err(|e| RuntimeError::Deserialize(e.to_string()))
 }
 
 /// Bind `name` to a serializable Rust value in `env`. Equivalent to
 /// `define(env, name, to_value(&v)?)`.
-pub fn define_value<T: Serialize + ?Sized>(env: &Env, name: &str, v: &T) -> Result<()> {
+pub fn define_value<T: Serialize + ?Sized>(env: &Env, name: &str, v: &T) -> RuntimeResult<()> {
     let val = to_value(v)?;
     define(env, name, val);
     Ok(())
@@ -75,7 +74,7 @@ fn json_number_to_rational(n: &JsonNumber) -> Rational {
     }
 }
 
-fn value_to_json(v: Value) -> Result<Json> {
+fn value_to_json(v: Value) -> RuntimeResult<Json> {
     Ok(match v {
         Value::Unit => Json::Null,
         Value::Bool(b) => Json::Bool(b),
@@ -84,33 +83,36 @@ fn value_to_json(v: Value) -> Result<Json> {
         // Atoms degrade to plain strings on the way out — that's the most
         // useful default for serde-tagged enums (`:Ok` ↔ `"Ok"`).
         Value::Atom(name) => Json::String(name.to_string()),
-        Value::List(xs) => Json::Array(xs.into_iter().map(value_to_json).collect::<Result<_>>()?),
-        Value::Set(xs) => Json::Array(xs.into_iter().map(value_to_json).collect::<Result<_>>()?),
+        Value::List(xs) => Json::Array(
+            xs.into_iter()
+                .map(value_to_json)
+                .collect::<RuntimeResult<_>>()?,
+        ),
+        Value::Set(xs) => Json::Array(
+            xs.into_iter()
+                .map(value_to_json)
+                .collect::<RuntimeResult<_>>()?,
+        ),
         Value::Object(entries) => {
             let mut obj = serde_json::Map::new();
             for (k, v) in entries {
                 let key = match k {
                     Value::String(s) => s.to_string(),
                     Value::Atom(s) => s.to_string(),
-                    other => bail!(
-                        "cannot deserialize Object with non-string/atom key: {}",
-                        other
-                    ),
+                    other => return Err(RuntimeError::NonStringObjectKey(other.to_string())),
                 };
                 obj.insert(key, value_to_json(v)?);
             }
             Json::Object(obj)
         }
-        Value::Range { .. } | Value::Cons { .. } => {
-            bail!("cannot deserialize lazy values; collect into a List first")
-        }
+        Value::Range { .. } | Value::Cons { .. } => return Err(RuntimeError::LazyDeserialize),
         Value::Function { .. } | Value::Native { .. } | Value::Module { .. } => {
-            bail!("cannot deserialize a Function or Module")
+            return Err(RuntimeError::FunctionDeserialize);
         }
     })
 }
 
-fn rational_to_json(rat: &Rational) -> Result<Json> {
+fn rational_to_json(rat: &Rational) -> RuntimeResult<Json> {
     let denom = rat.denom();
     if denom == &Integer::from(1) {
         let num = rat.numer();
@@ -122,8 +124,8 @@ fn rational_to_json(rat: &Rational) -> Result<Json> {
         }
     }
     let f = rat.to_f64();
-    let n =
-        JsonNumber::from_f64(f).ok_or_else(|| anyhow!("cannot represent {} as a float", rat))?;
+    let n = JsonNumber::from_f64(f)
+        .ok_or_else(|| RuntimeError::CannotRepresentAsFloat(rat.to_string()))?;
     Ok(Json::Number(n))
 }
 

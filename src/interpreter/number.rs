@@ -1,5 +1,6 @@
-use anyhow::{Result, anyhow, bail};
 use rug::{Integer, Rational};
+
+use super::error::{RuntimeError, RuntimeResult};
 
 // Truncated-toward-zero modulo on rationals: a - b * trunc(a / b).
 pub(super) fn rat_mod(a: &Rational, b: &Rational) -> Rational {
@@ -11,22 +12,19 @@ pub(super) fn rat_mod(a: &Rational, b: &Rational) -> Rational {
 
 // `**` requires an integer exponent; non-integer exponents would produce
 // irrationals that don't fit in Rational.
-pub(super) fn rat_pow(base: &Rational, exp: &Rational) -> Result<Rational> {
+pub(super) fn rat_pow(base: &Rational, exp: &Rational) -> RuntimeResult<Rational> {
     if exp.denom() != &Integer::from(1) {
-        bail!(
-            "** requires an integer exponent, got {}",
-            format_rational(exp)
-        );
+        return Err(RuntimeError::PowNonIntegerExponent(format_rational(exp)));
     }
     let e_int = exp.numer();
     let e: i32 = e_int
         .to_i32()
-        .ok_or_else(|| anyhow!("** exponent out of range: {}", e_int))?;
+        .ok_or_else(|| RuntimeError::PowExponentOutOfRange(e_int.to_string()))?;
     if e == 0 {
         return Ok(Rational::from(1));
     }
     if base.cmp0() == std::cmp::Ordering::Equal && e < 0 {
-        bail!("0 cannot be raised to a negative power");
+        return Err(RuntimeError::ZeroToNegativePower);
     }
     use rug::ops::Pow;
     Ok(base.clone().pow(e))

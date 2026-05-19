@@ -1,4 +1,3 @@
-use anyhow::{Result, anyhow, bail};
 use im::Vector;
 use rug::Rational;
 use std::cell::RefCell;
@@ -7,6 +6,7 @@ use std::rc::Rc;
 use crate::ast::{AccessKey, ExportKind, Expr, Program, Statement, UnaryOp};
 
 use super::binop::eval_binary;
+use super::error::{RuntimeError, RuntimeResult};
 use super::pattern::match_pattern;
 use super::scope::{Env, Scope, ctx_of, define, lookup};
 use super::value::{LazyState, Value, type_name};
@@ -14,7 +14,7 @@ use super::value::{LazyState, Value, type_name};
 /// Force a lazy thunk to a concrete value. Memoizes via the shared RefCell so
 /// re-forcing is cheap. Used by pattern matching, equality, display, and the
 /// `force_cons` helper that walks a stream's spine.
-pub fn force_tail(tail: &Rc<RefCell<LazyState>>) -> Result<Value> {
+pub fn force_tail(tail: &Rc<RefCell<LazyState>>) -> RuntimeResult<Value> {
     if let LazyState::Forced(v) = &*tail.borrow() {
         return Ok(v.clone());
     }
@@ -31,7 +31,7 @@ pub fn force_tail(tail: &Rc<RefCell<LazyState>>) -> Result<Value> {
     Ok(v)
 }
 
-pub fn run(program: &Program) -> Result<Value> {
+pub fn run(program: &Program) -> RuntimeResult<Value> {
     let env = Scope::new();
     crate::prelude::install(&env);
     eval_program(program, &env)
@@ -40,7 +40,7 @@ pub fn run(program: &Program) -> Result<Value> {
 /// Apply a value (function or native) to a list of already-evaluated args.
 /// Calls are unary after the parser's curry desugar, so `arg_vals` is either
 /// empty (zero-arg call: `f()`) or a single value.
-pub fn apply(env: &Env, callee: Value, arg_vals: Vec<Value>) -> Result<Value> {
+pub fn apply(env: &Env, callee: Value, arg_vals: Vec<Value>) -> RuntimeResult<Value> {
     match callee {
         Value::Function {
             params,
@@ -48,11 +48,10 @@ pub fn apply(env: &Env, callee: Value, arg_vals: Vec<Value>) -> Result<Value> {
             env: fn_env,
         } => {
             if params.len() != arg_vals.len() {
-                bail!(
-                    "function expects {} arg(s), got {}",
-                    params.len(),
-                    arg_vals.len()
-                );
+                return Err(RuntimeError::ArityMismatch {
+                    expected: params.len(),
+                    got: arg_vals.len(),
+                });
             }
             let scope = Scope::child(fn_env);
             for (p, a) in params.iter().zip(arg_vals) {
@@ -70,12 +69,11 @@ pub fn apply(env: &Env, callee: Value, arg_vals: Vec<Value>) -> Result<Value> {
                 if arity == 0 && applied.is_empty() {
                     return (f.0)(env, &[]);
                 }
-                bail!(
-                    "native `{}` expects {} arg(s), got {}",
+                return Err(RuntimeError::NativeArity {
                     name,
-                    arity,
-                    applied.len()
-                );
+                    expected: arity,
+                    got: applied.len(),
+                });
             }
             applied.extend(arg_vals);
             if applied.len() == arity {
@@ -88,14 +86,14 @@ pub fn apply(env: &Env, callee: Value, arg_vals: Vec<Value>) -> Result<Value> {
                     f,
                 })
             } else {
-                bail!("native `{}` over-applied (arity {})", name, arity)
+                Err(RuntimeError::NativeOverApplied { name, arity })
             }
         }
-        v => bail!("cannot call non-function: {}", type_name(&v)),
+        v => Err(RuntimeError::NotCallable(type_name(&v))),
     }
 }
 
-pub fn eval_program(program: &Program, env: &Env) -> Result<Value> {
+pub fn eval_program(program: &Program, env: &Env) -> RuntimeResult<Value> {
     let mut last = Value::Unit;
     for stmt in &program.statements {
         last = eval_statement(stmt, env)?;
@@ -103,12 +101,12 @@ pub fn eval_program(program: &Program, env: &Env) -> Result<Value> {
     Ok(last)
 }
 
-fn eval_statement(stmt: &Statement, env: &Env) -> Result<Value> {
+fn eval_statement(stmt: &Statement, env: &Env) -> RuntimeResult<Value> {
     match stmt {
         Statement::Assignment(a) => {
             let val = eval_expr(&a.value, env)?;
             let bindings = match_pattern(&a.pattern, &val, env)?
-                .ok_or_else(|| anyhow!("pattern match failed in assignment"))?;
+                .ok_or(RuntimeError::AssignmentPatternFailed)?;
             for (k, v) in bindings {
                 define(env, &k, v);
             }
@@ -131,7 +129,7 @@ fn eval_statement(stmt: &Statement, env: &Env) -> Result<Value> {
                 ExportKind::Names(names) => {
                     for name in names {
                         let v = lookup(env, name)
-                            .ok_or_else(|| anyhow!("export: undefined variable `{}`", name))?;
+                            .ok_or_else(|| RuntimeError::ExportUndefined(name.clone()))?;
                         table.insert(name.clone(), v);
                     }
                 }
@@ -154,7 +152,7 @@ fn eval_statement(stmt: &Statement, env: &Env) -> Result<Value> {
     }
 }
 
-pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
+pub fn eval_expr(expr: &Expr, env: &Env) -> RuntimeResult<Value> {
     match expr {
         Expr::Unit => Ok(Value::Unit),
         Expr::Number(n) => Ok(Value::Number(Rc::new(n.clone()))),
@@ -162,13 +160,13 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
         Expr::Bool(b) => Ok(Value::Bool(*b)),
         Expr::Atom(name) => Ok(Value::Atom(name.as_str().into())),
         Expr::Ident(name) => {
-            lookup(env, name).ok_or_else(|| anyhow!("undefined variable: {}", name))
+            lookup(env, name).ok_or_else(|| RuntimeError::UndefinedVariable(name.clone()))
         }
         Expr::List(items) => Ok(Value::List(
             items
                 .iter()
                 .map(|e| eval_expr(e, env))
-                .collect::<Result<_>>()?,
+                .collect::<RuntimeResult<_>>()?,
         )),
         Expr::Object(entries) => {
             let mut out: Vector<(Value, Value)> = Vector::new();
@@ -205,7 +203,7 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
         } => match eval_expr(cond, env)? {
             Value::Bool(true) => eval_expr(then_branch, env),
             Value::Bool(false) => eval_expr(else_branch, env),
-            v => bail!("if condition must be Bool, got {}", type_name(&v)),
+            v => Err(RuntimeError::IfConditionNotBool(type_name(&v))),
         },
         Expr::Match { scrutinee, arms } => {
             let val = eval_expr(scrutinee, env)?;
@@ -219,20 +217,20 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                         match eval_expr(guard, &scope)? {
                             Value::Bool(true) => {}
                             Value::Bool(false) => continue,
-                            v => bail!("match guard must be Bool, got {}", type_name(&v)),
+                            v => return Err(RuntimeError::MatchGuardNotBool(type_name(&v))),
                         }
                     }
                     return eval_expr(&arm.body, &scope);
                 }
             }
-            bail!("no match arm matched")
+            Err(RuntimeError::NoMatchArm)
         }
         Expr::Call { callee, args } => {
             let callee_val = eval_expr(callee, env)?;
             let arg_vals: Vec<Value> = args
                 .iter()
                 .map(|a| eval_expr(a, env))
-                .collect::<Result<_>>()?;
+                .collect::<RuntimeResult<_>>()?;
             apply(env, callee_val, arg_vals)
         }
         Expr::Range {
@@ -242,14 +240,14 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
         } => {
             let start_v = eval_expr(start, env)?;
             let Value::Number(s) = start_v else {
-                bail!("Range start must be a Number, got {}", type_name(&start_v));
+                return Err(RuntimeError::RangeStartNotNumber(type_name(&start_v)));
             };
             let end_v = match end {
                 None => None,
                 Some(e) => {
                     let v = eval_expr(e, env)?;
                     let Value::Number(n) = v else {
-                        bail!("Range end must be a Number, got {}", type_name(&v));
+                        return Err(RuntimeError::RangeEndNotNumber(type_name(&v)));
                     };
                     Some(n)
                 }
@@ -263,44 +261,46 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
         Expr::Import(path) => {
             let v = eval_expr(path, env)?;
             let Value::String(s) = v else {
-                bail!("import expects String path, got {}", type_name(&v));
+                return Err(RuntimeError::ImportPathNotString(type_name(&v)));
             };
             crate::prelude::import_module(env, &s)
         }
         Expr::Access { target, key } => {
             let t = eval_expr(target, env)?;
             match (&t, key) {
-                (Value::List(xs), AccessKey::Index(i)) => xs
-                    .get(*i)
-                    .cloned()
-                    .ok_or_else(|| anyhow!("index {} out of range (len {})", i, xs.len())),
+                (Value::List(xs), AccessKey::Index(i)) => {
+                    xs.get(*i).cloned().ok_or(RuntimeError::IndexOutOfRange {
+                        index: *i,
+                        len: xs.len(),
+                    })
+                }
                 (Value::Object(es), AccessKey::Field(name)) => {
                     let k = Value::String(name.as_str().into());
                     es.iter()
                         .find(|(ek, _)| ek == &k)
                         .map(|(_, v)| v.clone())
-                        .ok_or_else(|| anyhow!("Object has no key {:?}", name))
+                        .ok_or_else(|| RuntimeError::ObjectMissingField(name.clone()))
                 }
                 (Value::Object(es), AccessKey::Atom(name)) => {
                     let k = Value::Atom(name.as_str().into());
                     es.iter()
                         .find(|(ek, _)| ek == &k)
                         .map(|(_, v)| v.clone())
-                        .ok_or_else(|| anyhow!("Object has no key :{}", name))
+                        .ok_or_else(|| RuntimeError::ObjectMissingAtom(name.clone()))
                 }
                 (Value::Module { members, .. }, AccessKey::Field(name)) => members
                     .get(name)
                     .cloned()
-                    .ok_or_else(|| anyhow!("Module has no member `.{}`", name)),
-                (v, AccessKey::Index(_)) => {
-                    bail!("cannot index into {}", type_name(v))
-                }
-                (v, AccessKey::Field(name)) => {
-                    bail!("cannot read field .{} from {}", name, type_name(v))
-                }
-                (v, AccessKey::Atom(name)) => {
-                    bail!("cannot read field .:{} from {}", name, type_name(v))
-                }
+                    .ok_or_else(|| RuntimeError::ModuleMissingMember(name.clone())),
+                (v, AccessKey::Index(_)) => Err(RuntimeError::CannotIndex(type_name(v))),
+                (v, AccessKey::Field(name)) => Err(RuntimeError::CannotReadField {
+                    field: name.clone(),
+                    type_name: type_name(v),
+                }),
+                (v, AccessKey::Atom(name)) => Err(RuntimeError::CannotReadAtomField {
+                    atom: name.clone(),
+                    type_name: type_name(v),
+                }),
             }
         }
         Expr::Unary { op, operand } => {
@@ -310,7 +310,10 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> Result<Value> {
                     Ok(Value::Number(Rc::new(Rational::from(-n.as_ref()))))
                 }
                 (UnaryOp::Not, Value::Bool(b)) => Ok(Value::Bool(!b)),
-                (op, v) => bail!("cannot apply {:?} to {}", op, type_name(&v)),
+                (op, v) => Err(RuntimeError::UnaryTypeError {
+                    op: *op,
+                    type_name: type_name(&v),
+                }),
             }
         }
         Expr::Binary { op, lhs, rhs } => eval_binary(*op, lhs, rhs, env),

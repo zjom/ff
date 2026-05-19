@@ -1,16 +1,21 @@
-use anyhow::{Result, bail};
 use rug::Rational;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::{BinaryOp, Expr};
 
+use super::error::{RuntimeError, RuntimeResult};
 use super::expr::eval_expr;
 use super::number::{rat_mod, rat_pow};
 use super::scope::Env;
 use super::value::{LazyState, Value, type_name};
 
-pub(super) fn eval_binary(op: BinaryOp, lhs: &Expr, rhs: &Expr, env: &Env) -> Result<Value> {
+pub(super) fn eval_binary(
+    op: BinaryOp,
+    lhs: &Expr,
+    rhs: &Expr,
+    env: &Env,
+) -> RuntimeResult<Value> {
     // `a :: b` is non-strict in `b`: evaluate the head eagerly and capture the
     // rhs as a thunk so recursive stdlib builders (e.g. `f(x) :: map(f, rest)`)
     // don't bottom out before pattern-matching the tail.
@@ -29,7 +34,10 @@ pub(super) fn eval_binary(op: BinaryOp, lhs: &Expr, rhs: &Expr, env: &Env) -> Re
     if matches!(op, BinaryOp::And | BinaryOp::Or) {
         let l = eval_expr(lhs, env)?;
         let Value::Bool(lb) = l else {
-            bail!("{:?} expects bool, got {}", op, type_name(&l));
+            return Err(RuntimeError::LogicalOperandNotBool {
+                op,
+                type_name: type_name(&l),
+            });
         };
         match (op, lb) {
             (BinaryOp::And, false) => return Ok(Value::Bool(false)),
@@ -38,7 +46,10 @@ pub(super) fn eval_binary(op: BinaryOp, lhs: &Expr, rhs: &Expr, env: &Env) -> Re
         }
         let r = eval_expr(rhs, env)?;
         let Value::Bool(rb) = r else {
-            bail!("{:?} expects bool, got {}", op, type_name(&r));
+            return Err(RuntimeError::LogicalOperandNotBool {
+                op,
+                type_name: type_name(&r),
+            });
         };
         return Ok(Value::Bool(rb));
     }
@@ -57,7 +68,7 @@ pub(super) fn eval_binary(op: BinaryOp, lhs: &Expr, rhs: &Expr, env: &Env) -> Re
         ))),
         (BinaryOp::Div, Value::Number(a), Value::Number(b)) => {
             if b.cmp0() == std::cmp::Ordering::Equal {
-                bail!("division by zero");
+                return Err(RuntimeError::DivisionByZero);
             }
             Ok(Value::Number(Rc::new(Rational::from(
                 a.as_ref() / b.as_ref(),
@@ -65,7 +76,7 @@ pub(super) fn eval_binary(op: BinaryOp, lhs: &Expr, rhs: &Expr, env: &Env) -> Re
         }
         (BinaryOp::Mod, Value::Number(a), Value::Number(b)) => {
             if b.cmp0() == std::cmp::Ordering::Equal {
-                bail!("modulo by zero");
+                return Err(RuntimeError::ModuloByZero);
             }
             Ok(Value::Number(Rc::new(rat_mod(a, b))))
         }
@@ -89,11 +100,10 @@ pub(super) fn eval_binary(op: BinaryOp, lhs: &Expr, rhs: &Expr, env: &Env) -> Re
         (BinaryOp::NotMatch, Value::String(a), Value::String(b)) => {
             Ok(Value::Bool(!a.contains(&**b)))
         }
-        (op, a, b) => bail!(
-            "cannot apply {:?} to {} and {}",
+        (op, a, b) => Err(RuntimeError::BinaryTypeError {
             op,
-            type_name(a),
-            type_name(b)
-        ),
+            lhs: type_name(a),
+            rhs: type_name(b),
+        }),
     }
 }

@@ -5,11 +5,10 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::rc::Rc;
 
-use anyhow::bail;
 use im::{Vector, vector};
 use rug::Rational;
 
-use crate::interpreter::{LazyState, Value, type_name};
+use crate::interpreter::{LazyState, RuntimeError, RuntimeResult, Value, type_name};
 use crate::native;
 
 pub fn members() -> Vec<(&'static str, Value)> {
@@ -19,7 +18,11 @@ pub fn members() -> Vec<(&'static str, Value)> {
 fn open_file() -> Value {
     native!("open", 1, |_env, args| {
         let Value::String(path) = &args[0] else {
-            bail!("open_file expected a string, got {}", type_name(&args[0]));
+            return Err(RuntimeError::NativeTypeError {
+                native: "open_file",
+                expected: "string",
+                got: type_name(&args[0]),
+            });
         };
         if !Path::new(&**path).exists() {
             err("file not exists");
@@ -47,9 +50,11 @@ fn write_fn(path: Rc<str>) -> Value {
                 Ok(()) => ok(Value::Unit),
                 Err(e) => err(e.to_string()),
             }),
-            _ => {
-                bail!("file.write expected a string, got {}", type_name(&args[0]));
-            }
+            _ => Err(RuntimeError::NativeTypeError {
+                native: "file.write",
+                expected: "string",
+                got: type_name(&args[0]),
+            }),
         }
     })
 }
@@ -64,9 +69,11 @@ fn append_fn(path: Rc<str>) -> Value {
                 },
                 Err(e) => err(e.to_string()),
             }),
-            _ => {
-                bail!("file.write expected a string, got {}", type_name(&args[0]));
-            }
+            _ => Err(RuntimeError::NativeTypeError {
+                native: "file.write",
+                expected: "string",
+                got: type_name(&args[0]),
+            }),
         }
     })
 }
@@ -93,7 +100,7 @@ fn lines_fn(path: Rc<str>) -> Value {
 // is a native thunk capturing the (advanced) reader. EOF terminates the spine
 // with `Value::List(empty)` so consumers that flatten or pattern-match see a
 // proper sequence terminator.
-fn lines_stream(mut reader: BufReader<File>) -> anyhow::Result<Value> {
+fn lines_stream(mut reader: BufReader<File>) -> RuntimeResult<Value> {
     let mut buf = String::new();
     match reader.read_line(&mut buf) {
         Ok(0) => Ok(Value::List(Vector::new())),
@@ -107,7 +114,7 @@ fn lines_stream(mut reader: BufReader<File>) -> anyhow::Result<Value> {
                 tail,
             })
         }
-        Err(e) => bail!("file.lines: {}", e),
+        Err(e) => Err(RuntimeError::Io(e)),
     }
 }
 

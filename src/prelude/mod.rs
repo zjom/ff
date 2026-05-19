@@ -1,6 +1,5 @@
-use crate::interpreter::{Env, Scope, Value, ctx_of, define, eval_program};
+use crate::interpreter::{Env, RuntimeError, RuntimeResult, Scope, Value, ctx_of, define, eval_program};
 use crate::parser::parse;
-use anyhow::{Result, anyhow};
 use im::vector;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -62,7 +61,7 @@ pub(crate) fn native_module(name: &str) -> Option<Value> {
 /// first; otherwise the path is resolved relative to the current file and the
 /// source is parsed and evaluated in a fresh child scope. Only names registered
 /// via `export` end up in the returned module's members.
-pub fn import_module(env: &Env, path_str: &str) -> Result<Value> {
+pub fn import_module(env: &Env, path_str: &str) -> RuntimeResult<Value> {
     if let Some(m) = native_module(path_str) {
         return Ok(m);
     }
@@ -74,9 +73,11 @@ pub fn import_module(env: &Env, path_str: &str) -> Result<Value> {
             .unwrap_or_else(|| PathBuf::from(path_str)),
         None => PathBuf::from(path_str),
     };
-    let source = std::fs::read_to_string(&resolved)
-        .map_err(|e| anyhow!("failed to read {}: {}", resolved.display(), e))?;
-    let program = parse(&source)?;
+    let source = std::fs::read_to_string(&resolved).map_err(|e| RuntimeError::ReadFile {
+        path: resolved.display().to_string(),
+        source: e,
+    })?;
+    let program = parse(&source).map_err(|e| RuntimeError::Parse(e.to_string()))?;
     let name = resolved
         .file_stem()
         .and_then(|s| s.to_str())

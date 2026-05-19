@@ -1,4 +1,3 @@
-use anyhow::{Result, bail};
 use im::Vector;
 use rug::Rational;
 use std::collections::HashMap;
@@ -6,6 +5,7 @@ use std::rc::Rc;
 
 use crate::ast::{Pattern, PatternItem};
 
+use super::error::{RuntimeError, RuntimeResult};
 use super::expr::{eval_expr, force_tail};
 use super::number::{range_has_elem, rat_succ};
 use super::scope::Env;
@@ -15,7 +15,7 @@ pub(super) fn match_pattern(
     pat: &Pattern,
     val: &Value,
     env: &Env,
-) -> Result<Option<HashMap<String, Value>>> {
+) -> RuntimeResult<Option<HashMap<String, Value>>> {
     let mut bindings = HashMap::new();
     if match_into(pat, val, env, &mut bindings)? {
         Ok(Some(bindings))
@@ -29,7 +29,7 @@ fn match_into(
     val: &Value,
     env: &Env,
     bindings: &mut HashMap<String, Value>,
-) -> Result<bool> {
+) -> RuntimeResult<bool> {
     match pat {
         Pattern::Wildcard => Ok(true),
         Pattern::Unit => Ok(matches!(val, Value::Unit)),
@@ -171,7 +171,7 @@ fn match_seq_range(
     inclusive: bool,
     env: &Env,
     bindings: &mut HashMap<String, Value>,
-) -> Result<bool> {
+) -> RuntimeResult<bool> {
     let rest_idx = items.iter().position(|i| matches!(i, PatternItem::Rest(_)));
     let mut cur: Rational = (**start).clone();
     match rest_idx {
@@ -200,7 +200,7 @@ fn match_seq_range(
             let before = &items[..idx];
             let after = &items[idx + 1..];
             if after.iter().any(|i| matches!(i, PatternItem::Rest(_))) {
-                bail!("multiple `..` patterns in one sequence");
+                return Err(RuntimeError::MultipleRestPatterns);
             }
             // `[a, .., b]` against a range would need to seek from the end —
             // only finite ranges have one, and even then the user can convert
@@ -243,7 +243,7 @@ fn match_cons_seq(
     env: &Env,
     bindings: &mut HashMap<String, Value>,
     rewrap: impl FnOnce(Vector<Value>) -> Value,
-) -> Result<bool> {
+) -> RuntimeResult<bool> {
     let Some(h) = xs.front() else {
         return Ok(false);
     };
@@ -260,7 +260,7 @@ fn match_seq(
     val: &Value,
     env: &Env,
     bindings: &mut HashMap<String, Value>,
-) -> Result<bool> {
+) -> RuntimeResult<bool> {
     let Value::List(elems) = val else {
         return Ok(false);
     };
@@ -285,7 +285,7 @@ fn match_seq(
                 .iter()
                 .any(|i| matches!(i, PatternItem::Rest(_)))
             {
-                bail!("multiple `..` patterns in one sequence");
+                return Err(RuntimeError::MultipleRestPatterns);
             }
             let before = &items[..idx];
             let after = &items[idx + 1..];

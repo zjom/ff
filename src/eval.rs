@@ -10,10 +10,10 @@ pub fn eval_file(path: impl AsRef<Path>) -> anyhow::Result<Value> {
     let program = parse(&source)?;
     let env = Scope::with_ctx(Ctx::stdio_with_file(path.to_path_buf()));
     crate::prelude::install(&env);
-    eval_program(&program, &env)
+    Ok(eval_program(&program, &env)?)
 }
 
 pub fn eval_source(source: &str) -> anyhow::Result<Value> {
     let program = parse(source)?;
-    interpreter::run(&program)
+    Ok(interpreter::run(&program)?)
 }

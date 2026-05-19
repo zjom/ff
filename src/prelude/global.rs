@@ -1,8 +1,7 @@
-use anyhow::bail;
 use im::Vector;
 use rug::Rational;
 
-use crate::interpreter::{Value, ctx_of, type_name};
+use crate::interpreter::{RuntimeError, Value, ctx_of, type_name};
 use crate::native;
 
 pub fn members() -> Vec<(&'static str, Value)> {
@@ -16,7 +15,9 @@ pub fn members() -> Vec<(&'static str, Value)> {
 }
 
 pub fn panic() -> Value {
-    native!("panic", 1, |_env, args| { bail!("panic: {}", args[0]) })
+    native!("panic", 1, |_env, args| {
+        Err(RuntimeError::Panic(args[0].to_string()))
+    })
 }
 
 fn cons() -> Value {
@@ -46,11 +47,16 @@ fn cons() -> Value {
                     xs.push_back((key, value));
                     Ok(Value::Object(xs))
                 } else {
-                    bail!("unsupported operation: can only cons a 2-element list with an object")
+                    Err(RuntimeError::UnsupportedOperation(
+                        "can only cons a 2-element list with an object".into(),
+                    ))
                 }
             }
 
-            (left, right) => bail!("unsupported operation: cannot cons {} with {}", left, right),
+            (left, right) => Err(RuntimeError::UnsupportedOperation(format!(
+                "cannot cons {} with {}",
+                left, right
+            ))),
         }
     })
 }
@@ -77,12 +83,11 @@ fn default() -> Value {
             | v @ Value::Native { .. }
             | v @ Value::Function { .. }
             | v @ Value::Module { .. } => {
-                bail!(
-                    "unsupported operation: default is not supported for {},{},{}",
-                    type_name(v),
-                    type_name(v),
-                    type_name(v)
-                )
+                let t = type_name(v);
+                return Err(RuntimeError::UnsupportedOperation(format!(
+                    "default is not supported for {},{},{}",
+                    t, t, t
+                )));
             }
         })
     })
@@ -93,11 +98,9 @@ fn print() -> Value {
         let s = &args[0].to_string();
         let ctx = ctx_of(env);
         if ctx.is_interactive {
-            writeln!(ctx_of(env).out.borrow_mut(), "{}", s)
-                .map_err(|e| anyhow::anyhow!("io error: {}", e))?;
+            writeln!(ctx_of(env).out.borrow_mut(), "{}", s)?;
         } else {
-            write!(ctx_of(env).out.borrow_mut(), "{}", s)
-                .map_err(|e| anyhow::anyhow!("io error: {}", e))?;
+            write!(ctx_of(env).out.borrow_mut(), "{}", s)?;
         }
         Ok(Value::Unit)
     })
@@ -105,8 +108,7 @@ fn print() -> Value {
 fn println() -> Value {
     native!("io.println", 1, |env, args| {
         let s = &args[0].to_string();
-        writeln!(ctx_of(env).out.borrow_mut(), "{}", s)
-            .map_err(|e| anyhow::anyhow!("io error: {}", e))?;
+        writeln!(ctx_of(env).out.borrow_mut(), "{}", s)?;
         Ok(Value::Unit)
     })
 }

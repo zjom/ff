@@ -2,9 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     interop::native_fn,
-    interpreter::{RuntimeError, Value, type_name},
-    native,
-    prelude::{err, ok},
+    interpreter::Value,
 };
 
 pub fn members() -> Vec<(&'static str, Value)> {
@@ -20,16 +18,14 @@ fn vars() -> Value {
 }
 
 fn var() -> Value {
-    native!("Env.var", 1, |_, args| {
-        match &args[0] {
-            Value::String(key) | Value::Atom(key) => match std::env::var(key.to_string()) {
-                Ok(value) => Ok(ok(Value::String(value.into()))),
-                Err(e) => Ok(err(e.to_string())),
-            },
-            v => Err(RuntimeError::UnsupportedOperation(format!(
-                "Env.var expected arg of type String, got: {}",
-                type_name(v),
-            ))),
+    // Accept either a string key (`"PATH"`) or an atom (`:PATH`, which arrives
+    // as the serialized form `":PATH"`); strip the leading `:` to recover the
+    // env-var name in both cases.
+    native_fn("Env.var", |key: String| {
+        let name = key.strip_prefix(':').unwrap_or(&key);
+        match std::env::var(name) {
+            Ok(value) => (":ok", value),
+            Err(e) => (":error", e.to_string()),
         }
     })
 }

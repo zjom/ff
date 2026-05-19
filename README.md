@@ -2,7 +2,7 @@
 
 > functional ff
 
-a small, highly extensible, functional language with strong rust interoperability. 
+a small, highly extensible, functional language with strong rust interoperability and native actor based concurrency.
 
 ## at a glance
 

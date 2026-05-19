@@ -64,7 +64,7 @@ pub enum RuntimeError {
     #[error("index {index} out of range (len {len})")]
     IndexOutOfRange { index: usize, len: usize },
 
-    #[error("Object has no key :{0}")]
+    #[error("Object has no key {0}")]
     ObjectMissingKey(String),
 
     #[error("Module has no member `.{0}`")]

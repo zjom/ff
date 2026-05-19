@@ -12,7 +12,7 @@ use crate::interpreter::{LazyState, RuntimeError, RuntimeResult, Value, type_nam
 use crate::native;
 
 pub fn members() -> Vec<(&'static str, Value)> {
-    vec![("open", open_file()), ("exists", exists())]
+    vec![("open", file_open()), ("exists", exists())]
 }
 
 fn exists() -> Value {
@@ -21,7 +21,7 @@ fn exists() -> Value {
     })
 }
 
-fn open_file() -> Value {
+fn file_open() -> Value {
     native!("Fs.open", 1, move |_env, args| {
         let Value::String(path) = &args[0] else {
             return Err(RuntimeError::NativeTypeError {
@@ -42,7 +42,7 @@ fn file_object(path: Arc<str>) -> Value {
         ("path", Value::String(path.clone())),
         ("write", write_fn(path.clone())),
         ("append", append_fn(path.clone())),
-        ("read_all", read_fn(path.clone())),
+        ("read_all", read_all(path.clone())),
         ("lines", lines_fn(path.clone())),
         ("bytes", bytes_fn(path.clone())),
         ("metadata", metadata_fn(path)),
@@ -66,7 +66,7 @@ fn append_fn(path: Arc<str>) -> Value {
     })
 }
 
-fn read_fn(path: Arc<str>) -> Value {
+fn read_all(path: Arc<str>) -> Value {
     native_fn("file.read_all", move || -> FfResult<String> {
         std::fs::read_to_string(&*path).into()
     })

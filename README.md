@@ -40,8 +40,8 @@ true && !false     # true
 # use the `Object` module to access object with arbitrary keys
 # objects and sets are unordered
 squares = {1: 1, 2: 4, 4: 16}
-Object.get squares 2         # 4
-Object.put squares 5 25      # {1: 1, 2: 4, 4: 16, 5: 25}
+Object.get 2 squares          # 4
+Object.put 5 25 squares       # {1: 1, 2: 4, 4: 16, 5: 25}
 # you can also use cons to put to objects
 [5, 25] :: squares           # {1: 1, 2: 4, 4: 16, 5: 25}
 ```

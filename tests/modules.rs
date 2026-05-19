@@ -71,7 +71,7 @@ fn import_native_module_exposes_named_members() {
     // the same atom-key lookup that any imported module relies on.
     let src = r#"
         M = import "Object"
-        M.get({:a: 1}, :a)
+        M.get(:a, {:a: 1})
     "#;
     assert_eq!(eval(src), "1");
 }
@@ -82,7 +82,7 @@ fn bare_import_native_splats_members_into_scope() {
     // `values` directly callable without the `Object.` prefix.
     let src = r#"
         import "Object"
-        get({:a: 1, :b: 2}, :b)
+        get(:b, {:a: 1, :b: 2})
     "#;
     assert_eq!(eval(src), "2");
 }
@@ -363,7 +363,7 @@ fn module_imported_twice_returns_equal_values() {
 #[test]
 fn imported_module_destructures_into_constituents() {
     assert_eq!(
-        eval("{get, put} = import \"Object\"\nm = put {:one: 1} :two 2\nget m :two"),
+        eval("{get, put} = import \"Object\"\nm = put :two 2 {:one: 1} \nget :two m "),
         "2"
     )
 }

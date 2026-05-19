@@ -12,28 +12,28 @@ pub fn members() -> Vec<(&'static str, Value)> {
 }
 fn get() -> Value {
     native!("object.get", 2, move |_env, args| {
-        if let Value::Object(obj) = &args[0] {
-            match obj.get(&args[1]) {
+        if let Value::Object(obj) = &args[1] {
+            match obj.get(&args[0]) {
                 Some(value) => Ok(value.clone()),
                 None => Ok(Value::Unit),
             }
         } else {
             Err(RuntimeError::UnsupportedOperation(format!(
                 "object.get expected Object, found {}",
-                args[0]
+                args[1]
             )))
         }
     })
 }
 fn put() -> Value {
     native!("object.put", 3, move |_env, args| {
-        if let Value::Object(mut obj) = args[0].clone() {
-            obj.insert(args[1].clone(), args[2].clone());
+        if let Value::Object(mut obj) = args[2].clone() {
+            obj.insert(args[0].clone(), args[1].clone());
             Ok(Value::Object(obj))
         } else {
             Err(RuntimeError::UnsupportedOperation(format!(
                 "object.put expected Object, found {}",
-                args[0]
+                args[2]
             )))
         }
     })

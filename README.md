@@ -2,10 +2,7 @@
 
 > functional ff
 
-A small, expression-oriented functional language. Everything is an expression,
-collections are immutable, functions curry, and pattern matching is the main
-control-flow tool. Cons (`::`) is lazy in its tail, so the same `map`/`filter`
-work on infinite streams as on finite lists.
+a small, highly extensible, functional language with strong rust interoperability. 
 
 ## at a glance
 
@@ -62,7 +59,7 @@ xs = [
 
 ## functions
 
-Functions are values. `=>` builds a lambda; parameters can be comma- or
+functions are values. `=>` builds a lambda; parameters can be comma- or
 space-separated, with or without parens.
 
 ```ff
@@ -80,11 +77,21 @@ add5 = add(5)
 add5(10)       # 15
 ```
 
-The pipe operator `|>` lives in the prelude:
 
 ```ff
+# as a convenience, we define pipe `(|>)`, left composition `(<<)` and right composition `(>>)` in the prelude
 [1, 2, 3] |> map(x => x * x) |> reduce((a, b) => a + b, 0)   # 14
+
+inc      = x => x + 1
+double   = x => 2 * x
+
+double_then_inc = inc << double
+double_then_inc 3          # 7
+
+inc_then_double = inc >> double
+inc_then_double 3          # 8
 ```
+
 
 ## pattern matching
 
@@ -165,7 +172,7 @@ assert = args => (
 
 ## blocks and control flow
 
-Parentheses with multiple statements form a block. The value of the last
+parentheses with multiple statements form a block. the value of the last
 expression is the value of the block; inner bindings don't leak.
 
 ```ff
@@ -211,7 +218,7 @@ handle(safe_div(10, 2))      # 5
 handle(safe_div(10, 0))      # -1
 ```
 
-Atoms work anywhere a value does — list/set elements, object keys, and patterns.
+atoms work anywhere a value does — list/set elements, object keys, and patterns.
 objects keyed by atoms read back with `.name`:
 
 ```ff
@@ -243,10 +250,11 @@ handle(safe_div(10, 0))      # -1
 
 ## custom operators
 
-Any sequence of operator characters can be a user-defined infix; precedence is
+any sequence of operator characters can be a user-defined infix; precedence is
 OCaml-style, picked from the first character (`*`/`/`/`%` bind tighter than
-`+`/`-`, which bind tighter than `=`/`<`/`>`, etc.). Prefix ops start with `?`
-or `~`.
+`+`/`-`, which bind tighter than `=`/`<`/`>`, etc.).
+
+prefix ops start with `?` or `~`.
 
 ```ff
 (<|>) = (x, y) => if x != default(x) then x else y
@@ -267,7 +275,7 @@ plus = (+)
 
 `import "path.ff"` returns an atom-keyed object containing whatever the file
 marked `export` — a module is just an object. As a bare statement (not the
-RHS of `=`), an import also splats those names into the current scope.
+RHS of `=`), an import splats those names into the current scope.
 
 ```ff
 # math.ff
@@ -283,6 +291,46 @@ square(7)                # 49
 M = import "math.ff"
 M.cube(3)                # 27
 ```
+
+
+## working with rust
+
+```rust
+use ff::interop::{FfResult, define_value, register};
+use ff::interpreter::{Scope, eval_program};
+use ff::parser::parse;
+use ff::prelude;
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+struct User { name: String, age: u32 }
+
+let env = Scope::new();
+prelude::install(&env);
+
+// Push a Rust value into the script's env.
+define_value(&env, "me", &User { name: "Ada".into(), age: 36 }).unwrap();
+
+// Expose a Rust function — args and return value (de)serialize via serde.
+register(&env, "greet", |u: User| format!("Hello, {}!", u.name));
+
+// Fallible natives use FfResult so ff sees a tagged pair.
+register(&env, "checked_div", |a: i64, b: i64| -> FfResult<i64> {
+    if b == 0 { FfResult::Err("divide by zero".into()) } else { FfResult::Ok(a / b) }
+});
+
+let prog = parse("greet(me)").unwrap();
+assert_eq!(eval_program(&prog, &env).unwrap().to_string(), "\"Hello, Ada!\"");
+
+let prog = parse("checked_div(10, 0)").unwrap();
+assert_eq!(
+    eval_program(&prog, &env).unwrap().to_string(),
+    "[:error, \"divide by zero\"]"
+);
+```
+
+
+see the `interop` module docs for more information.
 
 ## running
 

@@ -16,13 +16,13 @@ pub fn members() -> Vec<(&'static str, Value)> {
 }
 
 fn exists() -> Value {
-    native_fn("fs.exists", move |path: String| -> FfResult<bool> {
+    native_fn("Fs.exists", move |path: String| -> FfResult<bool> {
         fs::exists(path).into()
     })
 }
 
 fn open_file() -> Value {
-    native!("fs.open", 1, move |_env, args| {
+    native!("Fs.open", 1, move |_env, args| {
         let Value::String(path) = &args[0] else {
             return Err(RuntimeError::NativeTypeError {
                 native: "open_file",
@@ -31,7 +31,7 @@ fn open_file() -> Value {
             });
         };
         if !Path::new(&**path).exists() {
-            err_str_tuple("file not exists");
+            err_str_tuple("File not exists");
         }
         Ok(file_object(path.clone()))
     })

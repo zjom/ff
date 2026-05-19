@@ -38,7 +38,7 @@ macro_rules! members {
             vec![$(
                 (
                     stringify!($name),
-                    crate::interop::native_fn(concat!($module, ".", stringify!($name)), $body),
+                    $crate::interop::native_fn(concat!($module, ".", stringify!($name)), $body),
                 ),
             )*]
         }

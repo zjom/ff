@@ -41,7 +41,6 @@ impl Validator for REPLHelper {
 
 fn run_program(program: &Program, env: &Env) {
     match eval_program(program, env) {
-        Ok(Value::Unit) => {}
         Ok(v) => println!("{}", v),
         Err(e) => eprintln!("error: {}", e),
     }

@@ -20,7 +20,7 @@ fn type_error_arithmetic() {
 #[test]
 fn if_condition_must_be_bool() {
     let msg = eval_err("if 1 then 0 else 1");
-    assert!(msg.contains("bool"), "got: {}", msg);
+    assert!(msg.contains("Bool"), "got: {}", msg);
 }
 
 #[test]

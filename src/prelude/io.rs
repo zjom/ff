@@ -1,10 +1,10 @@
 use im::Vector;
 use std::io::BufRead;
 
-use crate::interop::{FfResult, native_fn};
+use crate::interop::FfResult;
 use crate::interpreter::{LazyState, RuntimeResult};
-use crate::native;
 use crate::prelude::{err_str_tuple, object, ok_tuple};
+use crate::{members, native};
 use std::io::BufReader;
 use std::io::{Bytes, Read, Write};
 use std::sync::{Arc, Mutex};
@@ -103,30 +103,20 @@ fn stdout() -> Value {
 struct Stdout {}
 impl Stdout {
     fn object() -> Value {
-        let entries = vec![
-            ("write", Self::write_fn()),
-            ("writeln", Self::writeln_fn()),
-            ("flush", Self::flush_fn()),
-        ];
-        object(entries)
+        object(Self::members())
     }
 
-    fn write_fn() -> Value {
-        native_fn("stdout.write", move |s: String| -> FfResult<()> {
-            std::io::stdout().write_all(s.as_bytes()).into()
-        })
-    }
-
-    fn writeln_fn() -> Value {
-        native_fn("stdout.writeln", move |s: String| -> FfResult<()> {
-            writeln!(std::io::stdout(), "{}", s).into()
-        })
-    }
-
-    fn flush_fn() -> Value {
-        native_fn("stdout.flush", move || -> FfResult<()> {
-            std::io::stdout().flush().into()
-        })
+    members! {
+        "stdout",
+        write => move |s: String| -> FfResult<()> {
+            std::io::stderr().write_all(s.as_bytes()).into()
+        },
+        writeln => move |s: String| -> FfResult<()> {
+            writeln!(std::io::stderr(), "{}", s).into()
+        },
+        flush => move || ->FfResult<()> {
+            std::io::stderr().flush().into()
+        }
     }
 }
 
@@ -137,29 +127,19 @@ fn stderr() -> Value {
 struct Stderr {}
 impl Stderr {
     fn object() -> Value {
-        let entries = vec![
-            ("write", Self::write_fn()),
-            ("writeln", Self::writeln_fn()),
-            ("flush", Self::flush_fn()),
-        ];
-        object(entries)
+        object(Self::members())
     }
 
-    fn write_fn() -> Value {
-        native_fn("stderr.write", move |s: String| -> FfResult<()> {
+    members! {
+        "stderr",
+        write => move |s: String| -> FfResult<()> {
             std::io::stderr().write_all(s.as_bytes()).into()
-        })
-    }
-
-    fn writeln_fn() -> Value {
-        native_fn("stderr.writeln", move |s: String| -> FfResult<()> {
+        },
+        writeln => move |s: String| -> FfResult<()> {
             writeln!(std::io::stderr(), "{}", s).into()
-        })
-    }
-
-    fn flush_fn() -> Value {
-        native_fn("stderr.flush", move || -> FfResult<()> {
+        },
+        flush => move || ->FfResult<()> {
             std::io::stderr().flush().into()
-        })
+        }
     }
 }

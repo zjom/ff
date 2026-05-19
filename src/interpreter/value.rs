@@ -3,7 +3,7 @@ use rug::Rational;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::ast::Expr;
+use crate::ast::{Expr, Pattern};
 
 use super::error::RuntimeResult;
 use super::number::format_rational;
@@ -59,7 +59,7 @@ pub enum Value {
         tail: Rc<RefCell<LazyState>>,
     },
     Function {
-        params: Vec<String>,
+        params: Vec<Pattern>,
         body: Expr,
         env: Env,
     },
@@ -288,8 +288,55 @@ impl std::fmt::Display for Value {
                 write!(f, "]")
             }
             Value::Cons { head, tail } => fmt_cons(f, head, tail),
-            Value::Function { params, .. } => write!(f, "<fn ({})>", params.join(", ")),
+            Value::Function { params, .. } => write!(
+                f,
+                "<fn ({})>",
+                params
+                    .iter()
+                    .map(format_pattern)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
             Value::Native { name, .. } => write!(f, "<native {}>", name),
+        }
+    }
+}
+
+/// Render a Pattern roughly back into its source form. Used by the
+/// `<fn (...)>` display so destructuring params show their shape.
+pub fn format_pattern(p: &Pattern) -> String {
+    match p {
+        Pattern::Wildcard => "_".to_string(),
+        Pattern::Unit => "()".to_string(),
+        Pattern::Ident(name) => name.clone(),
+        Pattern::Number(n) => format_rational(n),
+        Pattern::String(s) => format!("{:?}", s),
+        Pattern::Bool(b) => b.to_string(),
+        Pattern::Atom(name) => format!(":{}", name),
+        Pattern::List(items) => {
+            let parts: Vec<String> = items
+                .iter()
+                .map(|i| match i {
+                    crate::ast::PatternItem::Pattern(p) => format_pattern(p),
+                    crate::ast::PatternItem::Rest(None) => "..".to_string(),
+                    crate::ast::PatternItem::Rest(Some(n)) => format!("..{}", n),
+                })
+                .collect();
+            format!("[{}]", parts.join(", "))
+        }
+        Pattern::Object(entries) => {
+            let parts: Vec<String> = entries
+                .iter()
+                .map(|(_, v)| format_pattern(v))
+                .collect();
+            format!("{{{}}}", parts.join(", "))
+        }
+        Pattern::Set(items) => {
+            let parts: Vec<String> = items.iter().map(format_pattern).collect();
+            format!("{{{}}}", parts.join(", "))
+        }
+        Pattern::Cons { head, tail } => {
+            format!("{} :: {}", format_pattern(head), format_pattern(tail))
         }
     }
 }

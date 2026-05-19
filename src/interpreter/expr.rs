@@ -63,7 +63,11 @@ pub fn apply(env: &Env, callee: Value, arg_vals: Vec<Value>) -> RuntimeResult<Va
             }
             let scope = Scope::child(fn_env);
             for (p, a) in params.iter().zip(arg_vals) {
-                define(&scope, p, a);
+                let bindings = match_pattern(p, &a, &scope)?
+                    .ok_or(RuntimeError::AssignmentPatternFailed)?;
+                for (k, v) in bindings {
+                    define(&scope, &k, v);
+                }
             }
             eval_expr(&body, &scope)
         }

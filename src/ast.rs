@@ -35,7 +35,7 @@ pub enum Expr {
     Object(Vec<(Expr, Expr)>),
     Set(Vec<Expr>),
     Function {
-        params: Vec<String>,
+        params: Vec<Pattern>,
         body: Box<Expr>,
     },
     If {

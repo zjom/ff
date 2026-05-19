@@ -371,10 +371,10 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
             let mut inner = pair.into_inner();
             let params_pair = inner.next().ok_or_else(|| anyhow!("missing params"))?;
             let body_pair = inner.next().ok_or_else(|| anyhow!("missing body"))?;
-            let params: Vec<String> = params_pair
+            let params: Vec<Pattern> = params_pair
                 .into_inner()
-                .map(|p| p.as_str().to_string())
-                .collect();
+                .map(build_pattern)
+                .collect::<Result<_>>()?;
             Ok(curry_function(params, build_expr(body_pair)?))
         }
         Rule::if_expr => {
@@ -425,7 +425,7 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
                     // `$match$` is not a valid user ident so it can't collide.
                     let param = "$match$".to_string();
                     Ok(Expr::Function {
-                        params: vec![param.clone()],
+                        params: vec![Pattern::Ident(param.clone())],
                         body: Box::new(Expr::Match {
                             scrutinee: Box::new(Expr::Ident(param)),
                             arms,
@@ -464,7 +464,7 @@ fn parse_number(s: &str) -> Result<Rational> {
 
 // Multi-param `(x, y, z) => body` desugars to `(x) => (y) => (z) => body`.
 // Zero-param functions are preserved as-is.
-fn curry_function(params: Vec<String>, body: Expr) -> Expr {
+fn curry_function(params: Vec<Pattern>, body: Expr) -> Expr {
     if params.len() <= 1 {
         return Expr::Function {
             params,

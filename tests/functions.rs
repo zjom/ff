@@ -113,3 +113,109 @@ fn function_returned_from_function() {
         "15"
     );
 }
+
+// --- pattern matching in function parameters --------------------------------
+
+#[test]
+fn param_list_destructure() {
+    assert_eq!(eval("f = [a, b] => a + b\nf([3, 4])"), "7");
+}
+
+#[test]
+fn param_list_with_rest() {
+    assert_eq!(
+        eval("f = [a, ..rest] => rest\nf([1, 2, 3, 4])"),
+        "[2, 3, 4]"
+    );
+}
+
+#[test]
+fn param_cons_destructure() {
+    assert_eq!(eval("f = h :: t => h\nf([1, 2, 3])"), "1");
+    assert_eq!(eval("f = h :: t => t\nf([1, 2, 3])"), "[2, 3]");
+}
+
+#[test]
+fn param_chained_cons() {
+    // `a :: b :: rest => ...` peels two elements.
+    assert_eq!(eval("f = a :: b :: rest => rest\nf([1, 2, 3, 4])"), "[3, 4]");
+    assert_eq!(eval("f = a :: b :: rest => b\nf([1, 2, 3, 4])"), "2");
+}
+
+#[test]
+fn param_atom_tagged_pair() {
+    assert_eq!(eval("f = [:ok, v] => v\nf([:ok, 42])"), "42");
+}
+
+#[test]
+fn param_object_destructure() {
+    assert_eq!(
+        eval(r#"f = {"name": n} => n
+f({"name": "ada", "age": 36})"#),
+        r#""ada""#
+    );
+}
+
+#[test]
+fn param_object_atom_key_destructure() {
+    assert_eq!(
+        eval("f = {:name: n} => n\nf({:name: \"ada\", :age: 36})"),
+        r#""ada""#
+    );
+}
+
+#[test]
+fn param_object_shorthand() {
+    assert_eq!(
+        eval(r#"f = {name} => name
+f({"name": "ada"})"#),
+        r#""ada""#
+    );
+}
+
+#[test]
+fn param_cons_with_list_head() {
+    // `[key, value] :: rest` peels the first entry of an object as a [k, v] pair.
+    assert_eq!(
+        eval(r#"f = [k, v] :: rest => k
+f({"a": 1, "b": 2})"#),
+        r#""a""#
+    );
+}
+
+#[test]
+fn param_wildcard() {
+    assert_eq!(eval("f = _ => 42\nf(99)"), "42");
+}
+
+#[test]
+fn param_literal_pattern_failure_is_runtime_error() {
+    // Calling a function whose param pattern doesn't match should error.
+    let src = "f = [:ok, v] => v\nf([:error, \"oops\"])";
+    let prog = ff::parser::parse(src).expect("parse");
+    assert!(ff::interpreter::run(&prog).is_err());
+}
+
+#[test]
+fn param_mixed_destructure_multi_arg() {
+    // Each curried param can be its own pattern.
+    assert_eq!(
+        eval("f = ([a, b], c) => a + b + c\nf([1, 2], 3)"),
+        "6"
+    );
+}
+
+#[test]
+fn param_nested_destructure() {
+    assert_eq!(
+        eval("f = [[a, b], [c, d]] => a + b + c + d\nf([[1, 2], [3, 4]])"),
+        "10"
+    );
+}
+
+#[test]
+fn param_cons_in_recursive_function() {
+    // Recursive sum via cons-pattern param plus a fallback arm.
+    let src = "sum = match\n  h :: t -> h + sum(t),\n  _ -> 0\nsum([1, 2, 3, 4])";
+    assert_eq!(eval(src), "10");
+}

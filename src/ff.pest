@@ -199,9 +199,12 @@ scope = {
 // Parameters are space-separated; commas are optional. Parens are optional for
 // one or more parameters but required for zero: `() => 1`, `x => x + 1`,
 // `a b c => a + b + c`, `(a, b, c) => ...`, `(a b c) => ...` all work.
+// Each parameter is a pattern, so functions can destructure their arguments:
+// `foo = [a, ..rest] => ...`, `foo = a :: rest => ...`,
+// `foo = {:key: value, ..} => ...`.
 params = {
-      "(" ~ (ident ~ (","? ~ ident)* ~ ","?)? ~ ")"
-    | ident ~ (","? ~ ident)*
+      "(" ~ (pattern ~ (","? ~ pattern)* ~ ","?)? ~ ")"
+    | pattern ~ (","? ~ pattern)*
 }
 function = { params ~ "=>" ~ expr }
 

@@ -120,6 +120,21 @@ the tail:
 {"lang": lang}  = {"lang": "ff", "version": 0.1}
 ```
 
+…and in function parameters, so a function can destructure its arguments
+directly. Any pattern that works on the LHS of `=` works as a parameter —
+including list, cons, and object patterns:
+
+```ff
+first = [a, ..] => a
+key   = [k, _] :: _ => k                  # peel the first entry of a object
+name  = {:name: n} => n
+add   = ([a, b], c) => a + b + c          # multi-param mix
+```
+
+A parameter pattern that doesn't match raises a runtime error at the call site,
+so for partial patterns (e.g. cons on a possibly-empty list) prefer `match`
+with a fallback arm.
+
 Guards refine an arm:
 
 ```ff

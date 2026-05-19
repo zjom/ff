@@ -62,13 +62,10 @@ fn json_to_value(j: Json) -> Value {
         Json::Null => Value::Unit,
         Json::Bool(b) => Value::Bool(b),
         Json::Number(n) => Value::Number(Rc::new(json_number_to_rational(&n))),
-        Json::String(s) => {
-            if s.starts_with(':') {
-                Value::Atom(s.into())
-            } else {
-                Value::String(s.into())
-            }
-        }
+        Json::String(s) => match s.strip_prefix(':') {
+            Some(rest) => Value::Atom(rest.into()),
+            None => Value::String(s.into()),
+        },
         Json::Array(arr) => Value::List(arr.into_iter().map(json_to_value).collect()),
         Json::Object(object) => Value::Object(
             object

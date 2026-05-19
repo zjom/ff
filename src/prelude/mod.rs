@@ -2,12 +2,13 @@ use crate::interpreter::{
     Env, RuntimeError, RuntimeResult, Scope, Value, ctx_of, define, eval_program,
 };
 use crate::parser::parse;
-use im::{HashMap, vector};
 use std::path::PathBuf;
 
 mod fs;
 mod global;
 mod object;
+mod utils;
+use utils::*;
 
 pub fn install(env: &Env) {
     for (name, f) in global::members() {
@@ -26,26 +27,7 @@ pub fn install(env: &Env) {
     }
 }
 
-pub(crate) fn ok(v: Value) -> Value {
-    Value::List(vector![Value::Atom("ok".into()), v])
-}
-
-pub(crate) fn err(msg: impl Into<String>) -> Value {
-    Value::List(vector![
-        Value::Atom("error".into()),
-        Value::String(msg.into().into())
-    ])
-}
-
-pub(crate) fn object(entries: Vec<(&str, Value)>) -> Value {
-    let entries = entries
-        .into_iter()
-        .map(|(name, value)| (Value::String(name.into()), value))
-        .collect();
-    Value::Object(entries)
-}
-
-pub(crate) fn native_module(name: &str) -> Option<Value> {
+pub fn native_module(name: &str) -> Option<Value> {
     let members = match name {
         "Fs" => fs::members(),
         "Object" => object::members(),
@@ -54,14 +36,6 @@ pub(crate) fn native_module(name: &str) -> Option<Value> {
     Some(object_with_atom_keys(
         members.into_iter().map(|(k, v)| (k.to_string(), v)),
     ))
-}
-
-fn object_with_atom_keys(entries: impl IntoIterator<Item = (String, Value)>) -> Value {
-    let mut out: HashMap<Value, Value> = HashMap::new();
-    for (k, v) in entries {
-        out.insert(Value::Atom(k.into()), v);
-    }
-    Value::Object(out)
 }
 
 /// Resolve and load a module by path. Built-in modules (`io`, etc.) are checked

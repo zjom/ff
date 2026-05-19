@@ -1,12 +1,82 @@
 //! Rust ↔ ff interop.
 //!
-//! `to_value` / `from_value` convert any `serde::Serialize` ↔ `Value` via
-//! `serde_json::Value` as an intermediate. `register` turns a plain Rust
-//! closure (`Fn(A1, ...) -> R`, with `A_i: DeserializeOwned` and
-//! `R: Serialize`) into a curried `Value::Native` and binds it in the env.
+//! Bridges Rust and ff in both directions: lift Rust values and functions into
+//! a ff [`Env`] so scripts can call them, and pull ff results back into Rust
+//! types. All conversion goes through `serde` — anything with a
+//! [`Serialize`] / [`DeserializeOwned`] impl works without writing glue.
+//!
+//! # The two halves
+//!
+//! **Values** — [`to_value`] and [`from_value`] convert any
+//! [`Serialize`] ↔ [`Value`] via `serde_json::Value` as the intermediate
+//! representation. [`define_value`] is the same as `to_value` followed by
+//! binding the result into an env under a name.
+//!
+//! **Functions** — [`register`] takes a plain Rust closure
+//! (`Fn(A1, ...) -> R`, with `Ai: DeserializeOwned` and `R: Serialize`) and
+//! installs it as a curried [`Value::Native`]. [`native_fn`] is the same
+//! without the binding step — useful when you're assembling a module object
+//! (a [`Value::Object`] of names → natives) rather than populating the global
+//! env.
+//!
+//! For natives that need to inspect raw [`Value`]s (e.g. to build a lazy
+//! stream or accept polymorphic arguments), reach for the [`native!`](crate::native) macro
+//! instead — it skips serde and hands you the [execution environment](Env) and args (a slice of [`Value`]s) directly.
+//!
+//! # Conventions
+//!
+//! - **Atoms** — strings whose first character is `:` round-trip as
+//!   [`Value::Atom`]. `to_value(&":ok")` produces `:ok`, not `":ok"`.
+//! - **Tagged results** — fallible natives return [`FfResult<T>`], which
+//!   serializes as `[:ok, t]` / `[:error, msg]` so ff code can pattern-match
+//!   on the shape. Any `Result<T, E: Display>` converts in with `.into()`.
+//! - **Currying** — `register(env, "add", |a, b| a + b)` lets scripts write
+//!   either `add(1, 2)` or `add(1)(2)`. The parser/Call dispatch handles
+//!   partial application; you don't need to think about it.
+//!
+//! # End-to-end example
+//!
+//! ```
+//! use ff::interop::{FfResult, define_value, register};
+//! use ff::interpreter::{Scope, eval_program};
+//! use ff::parser::parse;
+//! use ff::prelude;
+//! use serde::{Deserialize, Serialize};
+//!
+//! #[derive(Serialize, Deserialize)]
+//! struct User { name: String, age: u32 }
+//!
+//! let env = Scope::new();
+//! prelude::install(&env);
+//!
+//! // Push a Rust value into the script's env.
+//! define_value(&env, "me", &User { name: "Ada".into(), age: 36 }).unwrap();
+//!
+//! // Expose a Rust function — args and return value (de)serialize via serde.
+//! register(&env, "greet", |u: User| format!("Hello, {}!", u.name));
+//!
+//! // Fallible natives use FfResult so ff sees a tagged pair.
+//! register(&env, "checked_div", |a: i64, b: i64| -> FfResult<i64> {
+//!     if b == 0 { FfResult::Err("divide by zero".into()) } else { FfResult::Ok(a / b) }
+//! });
+//!
+//! let prog = parse("greet(me)").unwrap();
+//! assert_eq!(eval_program(&prog, &env).unwrap().to_string(), "\"Hello, Ada!\"");
+//!
+//! let prog = parse("checked_div(10, 0)").unwrap();
+//! assert_eq!(
+//!     eval_program(&prog, &env).unwrap().to_string(),
+//!     "[:error, \"divide by zero\"]"
+//! );
+//! ```
+//!
+//! See [`prelude::fs`](crate::prelude::fs) for a worked example that mixes
+//! [`native_fn`] (for the simple cases) with [`native!`](crate::native) (for `file.lines`,
+//! which returns a lazy stream).
 
 use std::rc::Rc;
 
+use im::vector;
 use rug::{Integer, Rational};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -18,6 +88,34 @@ use crate::interpreter::{Env, NativeFn, RuntimeError, RuntimeResult, Value, defi
 /// ff's tagged result convention: `[:ok, t]` / `[:error, msg]`. Serializes
 /// directly to that shape, so natives can return `FfResult<T>` (or just
 /// `.into()` a `Result<T, E>`) and stay idiomatic Rust.
+///
+/// # Example
+///
+/// ```
+/// use ff::interop::{FfResult, register};
+/// use ff::interpreter::{Scope, eval_program};
+/// use ff::parser::parse;
+/// use ff::prelude;
+///
+/// let env = Scope::new();
+/// prelude::install(&env);
+/// register(&env, "checked_div", |a: i64, b: i64| -> FfResult<i64> {
+///     if b == 0 {
+///         Err::<i64, _>("divide by zero").into()
+///     } else {
+///         FfResult::Ok(a / b)
+///     }
+/// });
+///
+/// let prog = parse("checked_div(10, 2)").unwrap();
+/// assert_eq!(eval_program(&prog, &env).unwrap().to_string(), "[:ok, 5]");
+///
+/// let prog = parse("checked_div(10, 0)").unwrap();
+/// assert_eq!(
+///     eval_program(&prog, &env).unwrap().to_string(),
+///     "[:error, \"divide by zero\"]"
+/// );
+/// ```
 pub enum FfResult<T> {
     Ok(T),
     Err(String),
@@ -49,9 +147,42 @@ impl<T, E: std::fmt::Display> From<Result<T, E>> for FfResult<T> {
     }
 }
 
-// Build a `Value::Native` with the given name, arity, and body. The body is
-// `Fn(&Ctx, &[Value]) -> Result<Value>`; arity-checking and partial application
-// are handled by the interpreter's Call dispatch.
+impl From<FfResult<Value>> for Value {
+    fn from(value: FfResult<Value>) -> Self {
+        match value {
+            FfResult::Ok(val) => Value::List(vector![Value::Atom(":ok".into()), val]),
+            FfResult::Err(e) => {
+                Value::List(vector![Value::Atom(":err".into()), Value::String(e.into())])
+            }
+        }
+    }
+}
+
+/// Build a `Value::Native` with the given name, arity, and body. The body is
+/// `Fn(&Env, &[Value]) -> RuntimeResult<Value>`; arity-checking and partial
+/// application are handled by the interpreter's Call dispatch.
+///
+/// Prefer [`native_fn`] / [`register`] when arguments and return values can be
+/// (de)serialized — use this only when the native needs to inspect raw
+/// [`Value`]s or build lazy/streaming results.
+///
+/// # Example
+///
+/// ```
+/// use ff::interpreter::{Scope, Value, eval_program};
+/// use ff::parser::parse;
+/// use ff::prelude;
+/// use ff::native;
+///
+/// let env = Scope::new();
+/// prelude::install(&env);
+///
+/// let pong = native!("pong", 0, |_env, _args| Ok(Value::String("pong".into())));
+/// ff::interpreter::define(&env, "pong", pong);
+///
+/// let prog = parse("pong()").unwrap();
+/// assert_eq!(eval_program(&prog, &env).unwrap().to_string(), "\"pong\"");
+/// ```
 #[macro_export]
 macro_rules! native {
     ($name:expr, $arity:expr, $body:expr) => {
@@ -64,11 +195,37 @@ macro_rules! native {
     };
 }
 
+/// Convert any [`serde::Serialize`] value into a ff [`Value`].
+///
+/// Vecs become `Value::List`, maps and structs become `Value::Object`, and
+/// strings starting with `:` are interpreted as atoms.
+///
+/// # Example
+///
+/// ```
+/// use ff::interop::to_value;
+///
+/// let v = to_value(&vec![1u32, 2, 3]).unwrap();
+/// assert_eq!(v.to_string(), "[1, 2, 3]");
+/// ```
 pub fn to_value<T: Serialize + ?Sized>(t: &T) -> RuntimeResult<Value> {
     let json = serde_json::to_value(t).map_err(|e| RuntimeError::Serialize(e.to_string()))?;
     Ok(json_to_value(json))
 }
 
+/// Convert a ff [`Value`] back into any [`serde::de::DeserializeOwned`] type.
+/// Inverse of [`to_value`]; lazy values (ranges, cons spines) and functions
+/// cannot be deserialized.
+///
+/// # Example
+///
+/// ```
+/// use ff::interop::{from_value, to_value};
+///
+/// let v = to_value(&vec![1u32, 2, 3]).unwrap();
+/// let back: Vec<u32> = from_value(v).unwrap();
+/// assert_eq!(back, vec![1, 2, 3]);
+/// ```
 pub fn from_value<T: DeserializeOwned>(v: Value) -> RuntimeResult<T> {
     let json = value_to_json(v)?;
     serde_json::from_value(json).map_err(|e| RuntimeError::Deserialize(e.to_string()))
@@ -76,6 +233,26 @@ pub fn from_value<T: DeserializeOwned>(v: Value) -> RuntimeResult<T> {
 
 /// Bind `name` to a serializable Rust value in `env`. Equivalent to
 /// `define(env, name, to_value(&v)?)`.
+///
+/// # Example
+///
+/// ```
+/// use ff::interop::define_value;
+/// use ff::interpreter::{Scope, eval_program};
+/// use ff::parser::parse;
+/// use ff::prelude;
+/// use serde::Serialize;
+///
+/// #[derive(Serialize)]
+/// struct Config { host: String, port: u16 }
+///
+/// let env = Scope::new();
+/// prelude::install(&env);
+/// define_value(&env, "config", &Config { host: "localhost".into(), port: 8080 }).unwrap();
+///
+/// let prog = parse("[config.host, config.port]").unwrap();
+/// assert_eq!(eval_program(&prog, &env).unwrap().to_string(), "[\"localhost\", 8080]");
+/// ```
 pub fn define_value<T: Serialize + ?Sized>(env: &Env, name: &str, v: &T) -> RuntimeResult<()> {
     let val = to_value(v)?;
     define(env, name, val);
@@ -85,7 +262,23 @@ pub fn define_value<T: Serialize + ?Sized>(env: &Env, name: &str, v: &T) -> Runt
 /// Build a curried `Value::Native` from a Rust function without binding it.
 /// Argument types must be `DeserializeOwned`; the return type must be
 /// `Serialize` (or `()`). Use this when assembling module objects; use
-/// `register` to bind directly into an env.
+/// [`register`] to bind directly into an env.
+///
+/// # Example
+///
+/// ```
+/// use ff::interop::native_fn;
+/// use ff::interpreter::Value;
+///
+/// let double = native_fn("double", |x: i64| x * 2);
+/// match double {
+///     Value::Native { name, arity, .. } => {
+///         assert_eq!(name, "double");
+///         assert_eq!(arity, 1);
+///     }
+///     _ => panic!("expected a Native"),
+/// }
+/// ```
 pub fn native_fn<F, Args>(name: &'static str, f: F) -> Value
 where
     F: IntoNative<Args>,
@@ -96,6 +289,26 @@ where
 /// Bind `name` to a Rust function in `env`. Argument types must be
 /// `DeserializeOwned`; the return type must be `Serialize` (or `()`).
 /// The native is curried — `f(a, b)` and `f(a)(b)` both work.
+///
+/// # Example
+///
+/// ```
+/// use ff::interop::register;
+/// use ff::interpreter::{Scope, eval_program};
+/// use ff::parser::parse;
+/// use ff::prelude;
+///
+/// let env = Scope::new();
+/// prelude::install(&env);
+/// register(&env, "add", |a: i64, b: i64| a + b);
+///
+/// let prog = parse("add(3, 4)").unwrap();
+/// assert_eq!(eval_program(&prog, &env).unwrap().to_string(), "7");
+///
+/// // Curried application works too.
+/// let prog = parse("add(3)(4)").unwrap();
+/// assert_eq!(eval_program(&prog, &env).unwrap().to_string(), "7");
+/// ```
 pub fn register<F, Args>(env: &Env, name: &'static str, f: F)
 where
     F: IntoNative<Args>,

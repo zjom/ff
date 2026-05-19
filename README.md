@@ -180,6 +180,26 @@ m.:name                                    # "ada"
 {:name: who} = m                           # who = "ada"
 ```
 
+
+## error handling
+
+functions that may fail should return length 2 lists of atom, value.
+e.g., `[:ok, 1]`, `[:error, "msg"]`
+
+this allows the caller to handle the cases as they wish via pattern matching.
+
+```ff
+safe_div = (a, b) =>
+  if b == 0 then [:error, "div0"] else [:ok, a / b]
+
+handle = match
+  [:ok, v]      -> v,
+  [:error, msg] -> -1
+
+handle(safe_div(10, 2))      # 5
+handle(safe_div(10, 0))      # -1
+```
+
 ## custom operators
 
 Any sequence of operator characters can be a user-defined infix; precedence is

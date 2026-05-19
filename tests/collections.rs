@@ -40,8 +40,13 @@ fn dict_literal() {
 
 #[test]
 fn dict_field_access() {
-    assert_eq!(eval(r#"d = {"name": "ada", "age": 36}
-d.name"#), r#""ada""#);
+    assert_eq!(
+        eval(
+            r#"d = {"name": "ada", "age": 36}
+d.name"#
+        ),
+        r#""ada""#
+    );
 }
 
 #[test]
@@ -96,10 +101,7 @@ fn list_leading_and_trailing_separators() {
 
 #[test]
 fn dict_multiline() {
-    assert_eq!(
-        eval("{\n  \"a\": 1,\n  \"b\": 2\n}"),
-        r#"{"a": 1, "b": 2}"#
-    );
+    assert_eq!(eval("{\n  \"a\": 1,\n  \"b\": 2\n}"), r#"{"a": 1, "b": 2}"#);
 }
 
 #[test]
@@ -114,5 +116,8 @@ fn set_multiline() {
 
 #[test]
 fn call_args_multiline() {
-    assert_eq!(eval("f = (a, b, c) => a + b + c\nf(\n  1,\n  2,\n  3,\n)"), "6");
+    assert_eq!(
+        eval("f = (a, b, c) => a + b + c\nf(\n  1,\n  2,\n  3,\n)"),
+        "6"
+    );
 }

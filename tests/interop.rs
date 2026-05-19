@@ -87,10 +87,7 @@ fn rust_fn_returning_struct() {
 fn rust_fn_takes_struct() {
     let env = fresh_env();
     register(&env, "greet", |p: Person| format!("Hi {}!", p.name));
-    let out = run(
-        &env,
-        r#"greet({"name": "Ada", "age": 36, "tags": []})"#,
-    );
+    let out = run(&env, r#"greet({"name": "Ada", "age": 36, "tags": []})"#);
     assert_eq!(out, Value::String("Hi Ada!".into()));
 }
 
@@ -136,6 +133,12 @@ fn vec_round_trip() {
 fn option_some_and_none() {
     let some: Option<i32> = Some(5);
     let none: Option<i32> = None;
-    assert_eq!(from_value::<Option<i32>>(to_value(&some).unwrap()).unwrap(), some);
-    assert_eq!(from_value::<Option<i32>>(to_value(&none).unwrap()).unwrap(), none);
+    assert_eq!(
+        from_value::<Option<i32>>(to_value(&some).unwrap()).unwrap(),
+        some
+    );
+    assert_eq!(
+        from_value::<Option<i32>>(to_value(&none).unwrap()).unwrap(),
+        none
+    );
 }

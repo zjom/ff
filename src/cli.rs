@@ -1,6 +1,6 @@
 use clap::{Parser, ValueEnum};
-use std::path::PathBuf;
 use rustyline::{ColorMode as RlColorMode, EditMode as RlEditMode};
+use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]

@@ -83,16 +83,8 @@ fn value_to_json(v: Value) -> Result<Json> {
         // Atoms degrade to plain strings on the way out — that's the most
         // useful default for serde-tagged enums (`:Ok` ↔ `"Ok"`).
         Value::Atom(name) => Json::String(name.to_string()),
-        Value::List(xs) => Json::Array(
-            xs.into_iter()
-                .map(value_to_json)
-                .collect::<Result<_>>()?,
-        ),
-        Value::Set(xs) => Json::Array(
-            xs.into_iter()
-                .map(value_to_json)
-                .collect::<Result<_>>()?,
-        ),
+        Value::List(xs) => Json::Array(xs.into_iter().map(value_to_json).collect::<Result<_>>()?),
+        Value::Set(xs) => Json::Array(xs.into_iter().map(value_to_json).collect::<Result<_>>()?),
         Value::Dict(entries) => {
             let mut map = serde_json::Map::new();
             for (k, v) in entries {

@@ -15,7 +15,10 @@ fn destructure_with_rest() {
 
 #[test]
 fn destructure_rest_in_middle() {
-    assert_eq!(eval("[first, ..mid, last] = [1, 2, 3, 4, 5]\nmid"), "[2, 3, 4]");
+    assert_eq!(
+        eval("[first, ..mid, last] = [1, 2, 3, 4, 5]\nmid"),
+        "[2, 3, 4]"
+    );
     assert_eq!(eval("[first, ..mid, last] = [1, 2, 3, 4, 5]\nlast"), "5");
 }
 
@@ -31,8 +34,13 @@ fn destructure_unit() {
 
 #[test]
 fn destructure_dict() {
-    assert_eq!(eval(r#"{"name": who} = {"name": "ada", "age": 36}
-who"#), r#""ada""#);
+    assert_eq!(
+        eval(
+            r#"{"name": who} = {"name": "ada", "age": 36}
+who"#
+        ),
+        r#""ada""#
+    );
 }
 
 #[test]
@@ -44,7 +52,10 @@ fn destructure_nested() {
 
 #[test]
 fn match_literal_arm() {
-    assert_eq!(eval("match 1\n  0 -> \"zero\",\n  1 -> \"one\",\n  n -> \"other\""), "\"one\"");
+    assert_eq!(
+        eval("match 1\n  0 -> \"zero\",\n  1 -> \"one\",\n  n -> \"other\""),
+        "\"one\""
+    );
 }
 
 #[test]
@@ -54,12 +65,18 @@ fn match_binding_arm() {
 
 #[test]
 fn match_wildcard_arm() {
-    assert_eq!(eval("match 42\n  0 -> \"zero\",\n  _ -> \"other\""), "\"other\"");
+    assert_eq!(
+        eval("match 42\n  0 -> \"zero\",\n  _ -> \"other\""),
+        "\"other\""
+    );
 }
 
 #[test]
 fn match_list_pattern() {
-    assert_eq!(eval("match [1, 2, 3]\n  [] -> 0,\n  [x] -> 1,\n  _ -> 99"), "99");
+    assert_eq!(
+        eval("match [1, 2, 3]\n  [] -> 0,\n  [x] -> 1,\n  _ -> 99"),
+        "99"
+    );
 }
 
 #[test]
@@ -74,20 +91,28 @@ fn match_list_rest() {
 fn match_dict_pattern() {
     // Dict pattern matches if all required keys exist; extras allowed.
     assert_eq!(
-        eval(r#"match {"name": "ada", "age": 36}
-  {"name": n} -> n"#),
+        eval(
+            r#"match {"name": "ada", "age": 36}
+  {"name": n} -> n"#
+        ),
         r#""ada""#
     );
 }
 
 #[test]
 fn match_trailing_comma() {
-    assert_eq!(eval("match 1\n  0 -> \"zero\",\n  1 -> \"one\",\n"), "\"one\"");
+    assert_eq!(
+        eval("match 1\n  0 -> \"zero\",\n  1 -> \"one\",\n"),
+        "\"one\""
+    );
 }
 
 #[test]
 fn match_arms_inline_with_commas() {
-    assert_eq!(eval("match 2\n  1 -> \"a\", 2 -> \"b\", _ -> \"c\""), "\"b\"");
+    assert_eq!(
+        eval("match 2\n  1 -> \"a\", 2 -> \"b\", _ -> \"c\""),
+        "\"b\""
+    );
 }
 
 #[test]
@@ -99,13 +124,19 @@ fn match_missing_comma_is_parse_error() {
 #[test]
 fn match_single_line_with_colon() {
     // `:` delimits the scrutinee from the arms when fitting on one line.
-    assert_eq!(eval("match 1: 0 -> \"zero\", 1 -> \"one\", _ -> \"other\""), "\"one\"");
+    assert_eq!(
+        eval("match 1: 0 -> \"zero\", 1 -> \"one\", _ -> \"other\""),
+        "\"one\""
+    );
 }
 
 #[test]
 fn match_single_line_no_scrutinee() {
     // Without a scrutinee a single-line match desugars to a 1-arg function.
-    assert_eq!(eval("f = match 0 -> \"zero\", _ -> \"other\"\nf(1)"), "\"other\"");
+    assert_eq!(
+        eval("f = match 0 -> \"zero\", _ -> \"other\"\nf(1)"),
+        "\"other\""
+    );
 }
 
 #[test]
@@ -134,10 +165,20 @@ fn cons_pattern_list_destructure() {
 
 #[test]
 fn cons_pattern_string_destructure() {
-    assert_eq!(eval(r#"h :: t = "abc"
-h"#), r#""a""#);
-    assert_eq!(eval(r#"h :: t = "abc"
-t"#), r#""bc""#);
+    assert_eq!(
+        eval(
+            r#"h :: t = "abc"
+h"#
+        ),
+        r#""a""#
+    );
+    assert_eq!(
+        eval(
+            r#"h :: t = "abc"
+t"#
+        ),
+        r#""bc""#
+    );
 }
 
 #[test]
@@ -150,10 +191,20 @@ fn cons_pattern_set_destructure() {
 fn cons_pattern_dict_destructure() {
     // Head is the first entry as a [key, value] list — the inverse of how
     // `::` prepends a `[k, v]` pair onto a dict.
-    assert_eq!(eval(r#"h :: t = {"a": 1, "b": 2}
-h"#), r#"["a", 1]"#);
-    assert_eq!(eval(r#"h :: t = {"a": 1, "b": 2}
-t"#), r#"{"b": 2}"#);
+    assert_eq!(
+        eval(
+            r#"h :: t = {"a": 1, "b": 2}
+h"#
+        ),
+        r#"["a", 1]"#
+    );
+    assert_eq!(
+        eval(
+            r#"h :: t = {"a": 1, "b": 2}
+t"#
+        ),
+        r#"{"b": 2}"#
+    );
 }
 
 #[test]
@@ -210,11 +261,14 @@ fn match_guard_can_reference_bound_idents() {
 #[test]
 fn match_guard_multiple_arms_same_pattern() {
     // Same `n` pattern, different guards — first truthy wins.
-    let src = "f = match\n  n if n < 0 -> \"neg\",\n  n if n == 0 -> \"zero\",\n  n -> \"pos\"\nf(-3)";
+    let src =
+        "f = match\n  n if n < 0 -> \"neg\",\n  n if n == 0 -> \"zero\",\n  n -> \"pos\"\nf(-3)";
     assert_eq!(eval(src), "\"neg\"");
-    let src = "f = match\n  n if n < 0 -> \"neg\",\n  n if n == 0 -> \"zero\",\n  n -> \"pos\"\nf 0";
+    let src =
+        "f = match\n  n if n < 0 -> \"neg\",\n  n if n == 0 -> \"zero\",\n  n -> \"pos\"\nf 0";
     assert_eq!(eval(src), "\"zero\"");
-    let src = "f = match\n  n if n < 0 -> \"neg\",\n  n if n == 0 -> \"zero\",\n  n -> \"pos\"\nf 7";
+    let src =
+        "f = match\n  n if n < 0 -> \"neg\",\n  n if n == 0 -> \"zero\",\n  n -> \"pos\"\nf 7";
     assert_eq!(eval(src), "\"pos\"");
 }
 

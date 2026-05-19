@@ -87,11 +87,12 @@ op_paren      = { "(" ~ op_paren_name ~ ")" }
 prefix_op  = _{ neg | logical_not | custom_prefix }
 postfix_op = _{ call_args | dot_access | juxt_arg }
 
-// `list.0` for list index, `object.foo` for object string-key lookup,
-// `object.:foo` for object atom-key lookup. `dot_index` is digits-only so
-// `xs.0.1` chains as `(xs.0).1` rather than being read as a single decimal index.
+// `list.0` for list index, `object.foo` for object atom-key lookup
+// (the `:` prefix is implicit after `.`), `module.foo` for module member.
+// `dot_index` is digits-only so `xs.0.1` chains as `(xs.0).1` rather than
+// being read as a single decimal index.
 dot_index  = @{ ASCII_DIGIT+ }
-dot_access = { "." ~ (dot_index | atom | ident) }
+dot_access = { "." ~ (dot_index | ident) }
 
 // Function application by juxtaposition: `f x` is `f(x)`. Each juxt_arg
 // consumes one primary, so `f g h` chains left-associatively as `(f g) h`.

@@ -64,11 +64,8 @@ pub enum RuntimeError {
     #[error("index {index} out of range (len {len})")]
     IndexOutOfRange { index: usize, len: usize },
 
-    #[error("Object has no key {0:?}")]
-    ObjectMissingField(String),
-
     #[error("Object has no key :{0}")]
-    ObjectMissingAtom(String),
+    ObjectMissingKey(String),
 
     #[error("Module has no member `.{0}`")]
     ModuleMissingMember(String),
@@ -76,13 +73,7 @@ pub enum RuntimeError {
     #[error("cannot index into {0}")]
     CannotIndex(&'static str),
 
-    #[error("cannot read field .{field} from {type_name}")]
-    CannotReadField {
-        field: String,
-        type_name: &'static str,
-    },
-
-    #[error("cannot read field .:{atom} from {type_name}")]
+    #[error("cannot read field .{atom} from {type_name}")]
     CannotReadAtomField {
         atom: String,
         type_name: &'static str,

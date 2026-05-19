@@ -274,30 +274,19 @@ pub fn eval_expr(expr: &Expr, env: &Env) -> RuntimeResult<Value> {
                         len: xs.len(),
                     })
                 }
-                (Value::Object(es), AccessKey::Field(name)) => {
-                    let k = Value::String(name.as_str().into());
-                    es.iter()
-                        .find(|(ek, _)| ek == &k)
-                        .map(|(_, v)| v.clone())
-                        .ok_or_else(|| RuntimeError::ObjectMissingField(name.clone()))
-                }
-                (Value::Object(es), AccessKey::Atom(name)) => {
+                (Value::Object(es), AccessKey::Name(name)) => {
                     let k = Value::Atom(name.as_str().into());
                     es.iter()
                         .find(|(ek, _)| ek == &k)
                         .map(|(_, v)| v.clone())
-                        .ok_or_else(|| RuntimeError::ObjectMissingAtom(name.clone()))
+                        .ok_or_else(|| RuntimeError::ObjectMissingKey(name.clone()))
                 }
-                (Value::Module { members, .. }, AccessKey::Field(name)) => members
+                (Value::Module { members, .. }, AccessKey::Name(name)) => members
                     .get(name)
                     .cloned()
                     .ok_or_else(|| RuntimeError::ModuleMissingMember(name.clone())),
                 (v, AccessKey::Index(_)) => Err(RuntimeError::CannotIndex(type_name(v))),
-                (v, AccessKey::Field(name)) => Err(RuntimeError::CannotReadField {
-                    field: name.clone(),
-                    type_name: type_name(v),
-                }),
-                (v, AccessKey::Atom(name)) => Err(RuntimeError::CannotReadAtomField {
+                (v, AccessKey::Name(name)) => Err(RuntimeError::CannotReadAtomField {
                     atom: name.clone(),
                     type_name: type_name(v),
                 }),

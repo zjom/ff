@@ -1,4 +1,6 @@
-use crate::interpreter::{Env, RuntimeError, RuntimeResult, Scope, Value, ctx_of, define, eval_program};
+use crate::interpreter::{
+    Env, RuntimeError, RuntimeResult, Scope, Value, ctx_of, define, eval_program,
+};
 use crate::parser::parse;
 use im::vector;
 use std::collections::HashMap;
@@ -6,6 +8,7 @@ use std::path::PathBuf;
 
 mod fs;
 mod global;
+mod object;
 
 pub fn install(env: &Env) {
     for (name, f) in global::members() {
@@ -45,7 +48,8 @@ pub(crate) fn object(entries: Vec<(&str, Value)>) -> Value {
 
 pub(crate) fn native_module(name: &str) -> Option<Value> {
     let members = match name {
-        "fs" => fs::members(),
+        "Fs" => fs::members(),
+        "Object" => object::members(),
         _ => return None,
     };
     Some(Value::Module {

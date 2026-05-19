@@ -33,12 +33,12 @@ true && !false     # true
 
 # three collections — lists, objects, sets. Lists are heterogeneous.
 [1, "two", true]
-{"name": "ada", "age": 36}
+{"lang": "ff", "version": 0.1}
 {1, 2, 2, 3}             # {1, 2, 3} — dedup
 
-# `.` indexes lists by position and objects by key
+# `.` indexes lists by position and atom-keyed objects by name
 [10, 20, 30].0           # 10
-{"x": {"y": 7}}.x.y      # 7
+{:x: {:y: 7}}.x.y        # 7
 ```
 
 Layouts are forgiving: commas and newlines are interchangeable inside `[]`,
@@ -110,7 +110,7 @@ the tail:
 ```ff
 [head, ..tail] = [1, 2, 3, 4]    # head = 1, tail = [2, 3, 4]
 [x, y]         = [10, 20]
-{"name": who}  = {"name": "ada", "age": 36}
+{"lang": lang}  = {"lang": "ff", "version": 0.1}
 ```
 
 Guards refine an arm:
@@ -189,13 +189,13 @@ handle(safe_div(10, 0))      # -1
 ```
 
 Atoms work anywhere a value does — list/set elements, object keys, and patterns.
-objects keyed by atoms read back with `.:name`:
+objects keyed by atoms read back with `.name`:
 
 ```ff
-m = {:name: "ada", :age: 36}
-m.:name                                    # "ada"
+m = {:lang: "ff", :fullname: "functionalff"}
+m.lang                                     # "ff"
 
-{:name: who} = m                           # who = "ada"
+{:lang: lang} = m                           # lang = "ff"
 ```
 
 

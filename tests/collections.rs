@@ -42,7 +42,7 @@ fn object_literal() {
 fn object_field_access() {
     assert_eq!(
         eval(
-            r#"d = {"name": "ada", "age": 36}
+            r#"d = {:name: "ada", :age: 36}
 d.name"#
         ),
         r#""ada""#
@@ -51,7 +51,7 @@ d.name"#
 
 #[test]
 fn object_last_write_wins() {
-    assert_eq!(eval(r#"{"k": 1, "k": 2}.k"#), "2");
+    assert_eq!(eval("{:k: 1, :k: 2}.k"), "2");
 }
 
 #[test]
@@ -67,7 +67,7 @@ fn nested_dot_access() {
 
 #[test]
 fn object_into_list_access() {
-    assert_eq!(eval(r#"{"items": [10, 20, 30]}.items.1"#), "20");
+    assert_eq!(eval("{:items: [10, 20, 30]}.items.1"), "20");
 }
 
 #[test]

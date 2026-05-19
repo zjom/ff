@@ -110,9 +110,8 @@ pub enum PatternItem {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AccessKey {
     Index(usize),
-    Field(String),
-    // `object.:foo` — look up the atom key `:foo`.
-    Atom(String),
+    // `object.foo` — atom-key lookup on objects, member lookup on modules.
+    Name(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

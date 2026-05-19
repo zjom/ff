@@ -56,7 +56,7 @@ fn json_to_value(j: Json) -> Value {
         Json::Object(object) => Value::Object(
             object
                 .into_iter()
-                .map(|(k, v)| (Value::String(k.into()), json_to_value(v)))
+                .map(|(k, v)| (Value::Atom(k.into()), json_to_value(v)))
                 .collect(),
         ),
     }

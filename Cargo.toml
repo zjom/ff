@@ -1,5 +1,9 @@
 [package]
 name = "f2"
+description = "highly extensive functional language with actor concurrency and rust interop"
+authors = ["Zihan Jin"]
+license = "Unlicense"
+repository = "https://github.com/zjom/ff"
 version = "0.1.0"
 edition = "2024"
 

@@ -17,13 +17,13 @@ pub fn members() -> Vec<(&'static str, Value)> {
 }
 
 fn exists() -> Value {
-    native_fn("exists", move |path: String| -> FfResult<bool> {
+    native_fn("fs.exists", move |path: String| -> FfResult<bool> {
         fs::exists(path).into()
     })
 }
 
 fn open_file() -> Value {
-    native!("open", 1, move |_env, args| {
+    native!("fs.open", 1, move |_env, args| {
         let Value::String(path) = &args[0] else {
             return Err(RuntimeError::NativeTypeError {
                 native: "open_file",

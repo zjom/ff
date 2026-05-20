@@ -1,0 +1,80 @@
+==================
+arithmetic precedence
+==================
+
+1 + 2 * 3
+
+---
+
+(program
+  (binary_expr
+    (number)
+    (add)
+    (binary_expr
+      (number)
+      (multiply)
+      (number))))
+
+==================
+power is right-associative
+==================
+
+2 ** 3 ** 2
+
+---
+
+(program
+  (binary_expr
+    (number)
+    (power)
+    (binary_expr
+      (number)
+      (power)
+      (number))))
+
+==================
+unary not stacks
+==================
+
+!!true
+
+---
+
+(program
+  (unary_expr
+    (logical_not)
+    (unary_expr
+      (logical_not)
+      (bool))))
+
+==================
+string concat
+==================
+
+"foo" + "bar"
+
+---
+
+(program
+  (binary_expr
+    (string)
+    (add)
+    (string)))
+
+==================
+parenthesized
+==================
+
+(1 + 2) * 3
+
+---
+
+(program
+  (binary_expr
+    (paren_expr
+      (binary_expr
+        (number)
+        (add)
+        (number)))
+    (multiply)
+    (number)))

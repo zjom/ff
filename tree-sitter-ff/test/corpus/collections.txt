@@ -1,0 +1,113 @@
+==================
+list
+==================
+
+[1, 2, 3]
+
+---
+
+(program
+  (list
+    (number)
+    (number)
+    (number)))
+
+==================
+list with newline separators
+==================
+
+[
+  1
+  2, 3
+  4,
+]
+
+---
+
+(program
+  (list
+    (number)
+    (number)
+    (number)
+    (number)))
+
+==================
+object
+==================
+
+{"lang": "ff", "version": 0.1}
+
+---
+
+(program
+  (object
+    (object_entry key: (string) value: (string))
+    (object_entry key: (string) value: (number))))
+
+==================
+atom-keyed object
+==================
+
+{:x: 1, :y: 2}
+
+---
+
+(program
+  (object
+    (object_entry key: (atom) value: (number))
+    (object_entry key: (atom) value: (number))))
+
+==================
+set
+==================
+
+{1, 2, 3}
+
+---
+
+(program
+  (set
+    (number)
+    (number)
+    (number)))
+
+==================
+range exclusive
+==================
+
+[0..10]
+
+---
+
+(program
+  (list
+    (range_expr
+      (number)
+      (number))))
+
+==================
+range inclusive
+==================
+
+[0..=10]
+
+---
+
+(program
+  (list
+    (range_expr
+      (number)
+      (number))))
+
+==================
+range open
+==================
+
+[0..]
+
+---
+
+(program
+  (list
+    (range_expr
+      (number))))

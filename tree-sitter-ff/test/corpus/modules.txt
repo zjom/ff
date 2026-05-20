@@ -1,0 +1,84 @@
+==================
+import
+==================
+
+import "math.ff"
+
+---
+
+(program
+  (import_expr
+    (string)))
+
+==================
+import bound
+==================
+
+M = import "math.ff"
+
+---
+
+(program
+  (assignment
+    lhs: (ident)
+    rhs: (import_expr
+      (string))))
+
+==================
+export names
+==================
+
+export square, cube
+
+---
+
+(program
+  (export_stmt
+    (export_names
+      (export_name
+        (ident))
+      (export_name
+        (ident)))))
+
+==================
+export all
+==================
+
+export *
+
+---
+
+(program
+  (export_stmt
+    (export_all)))
+
+==================
+custom infix definition
+==================
+
+(<|>) = (x, y) => x
+
+---
+
+(program
+  (assignment
+    lhs: (op_paren)
+    rhs: (function
+      params: (params
+        (ident)
+        (ident))
+      body: (ident))))
+
+==================
+custom infix use
+==================
+
+1 ++ 2
+
+---
+
+(program
+  (binary_expr
+    (number)
+    (custom_op_add)
+    (number)))

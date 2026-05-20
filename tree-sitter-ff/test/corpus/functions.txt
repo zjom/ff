@@ -1,0 +1,142 @@
+==================
+lambda single param
+==================
+
+x => x + 1
+
+---
+
+(program
+  (function
+    params: (params
+      (ident))
+    body: (binary_expr
+      (ident)
+      (add)
+      (number))))
+
+==================
+lambda multi param parens
+==================
+
+(x, y) => x + y
+
+---
+
+(program
+  (function
+    params: (params
+      (ident)
+      (ident))
+    body: (binary_expr
+      (ident)
+      (add)
+      (ident))))
+
+==================
+lambda multi param space-separated
+==================
+
+a b c => a + b + c
+
+---
+
+(program
+  (function
+    params: (params
+      (ident)
+      (ident)
+      (ident))
+    body: (binary_expr
+      (binary_expr
+        (ident)
+        (add)
+        (ident))
+      (add)
+      (ident))))
+
+==================
+zero arg lambda
+==================
+
+() => 1
+
+---
+
+(program
+  (function
+    params: (params)
+    body: (number)))
+
+==================
+call with parens
+==================
+
+add(3, 4)
+
+---
+
+(program
+  (call_expr
+    fn: (ident)
+    (call_args
+      (number)
+      (number))))
+
+==================
+juxtaposition application
+==================
+
+inc 5
+
+---
+
+(program
+  (juxt_expr
+    fn: (ident)
+    arg: (number)))
+
+==================
+curried call
+==================
+
+add(3)(4)
+
+---
+
+(program
+  (call_expr
+    fn: (call_expr
+      fn: (ident)
+      (call_args
+        (number)))
+    (call_args
+      (number))))
+
+==================
+dot index
+==================
+
+xs.0
+
+---
+
+(program
+  (dot_expr
+    object: (ident)
+    field: (dot_index)))
+
+==================
+dot field chain
+==================
+
+m.x.y
+
+---
+
+(program
+  (dot_expr
+    object: (dot_expr
+      object: (ident)
+      field: (ident))
+    field: (ident)))

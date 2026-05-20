@@ -1,0 +1,131 @@
+==================
+list destructure
+==================
+
+[a, b, c] = [1, 2, 3]
+
+---
+
+(program
+  (assignment
+    lhs: (pattern_list
+      (ident)
+      (ident)
+      (ident))
+    rhs: (list
+      (number)
+      (number)
+      (number))))
+
+==================
+list destructure with rest
+==================
+
+[head, ..tail] = xs
+
+---
+
+(program
+  (assignment
+    lhs: (pattern_list
+      (ident)
+      (pattern_rest
+        (ident)))
+    rhs: (ident)))
+
+==================
+anonymous rest
+==================
+
+[head, ..] = xs
+
+---
+
+(program
+  (assignment
+    lhs: (pattern_list
+      (ident)
+      (pattern_rest))
+    rhs: (ident)))
+
+==================
+object destructure
+==================
+
+{"name": who} = m
+
+---
+
+(program
+  (assignment
+    lhs: (pattern_object
+      (pattern_object_entry
+        key: (string)
+        value: (ident)))
+    rhs: (ident)))
+
+==================
+cons pattern
+==================
+
+h :: t = xs
+
+---
+
+(program
+  (assignment
+    lhs: (pattern_cons
+      (ident)
+      (cons_op)
+      (ident))
+    rhs: (ident)))
+
+==================
+match with arms
+==================
+
+match xs
+  [] -> 0,
+  h :: t -> 1
+
+---
+
+(program
+  (match_expr
+    scrutinee: (ident)
+    (match_arm
+      pattern: (pattern_list)
+      body: (number))
+    (match_arm
+      pattern: (pattern_cons
+        (ident)
+        (cons_op)
+        (ident))
+      body: (number))))
+
+==================
+match with guard
+==================
+
+match n
+  n if n < 0 -> -1,
+  _ -> 1
+
+---
+
+(program
+  (match_expr
+    scrutinee: (ident)
+    (match_arm
+      pattern: (ident)
+      (match_guard
+        (binary_expr
+          (ident)
+          (lt)
+          (number)))
+      body: (unary_expr
+        (neg)
+        (number)))
+    (match_arm
+      pattern: (wildcard)
+      body: (number))))

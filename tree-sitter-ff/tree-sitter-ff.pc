@@ -1,0 +1,10 @@
+prefix=/usr/local
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: tree-sitter-ff
+Description: 
+URL: https://github.com/tree-sitter/tree-sitter-ff
+Version: 0.1.0
+Libs: -L${libdir} -ltree-sitter-ff
+Cflags: -I${includedir}

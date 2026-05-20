@@ -1,0 +1,90 @@
+==================
+if expression
+==================
+
+if x < 0 then -x else x
+
+---
+
+(program
+  (if_expr
+    cond: (binary_expr
+      (ident)
+      (lt)
+      (number))
+    then: (unary_expr
+      (neg)
+      (ident))
+    else: (ident)))
+
+==================
+if multi-line
+==================
+
+if cond
+then x
+else y
+
+---
+
+(program
+  (if_expr
+    cond: (ident)
+    then: (ident)
+    else: (ident)))
+
+==================
+scope block
+==================
+
+(
+  w = 4
+  h = 5
+  w * h
+)
+
+---
+
+(program
+  (scope
+    (assignment
+      lhs: (ident)
+      rhs: (number))
+    (assignment
+      lhs: (ident)
+      rhs: (number))
+    (binary_expr
+      (ident)
+      (multiply)
+      (ident))))
+
+==================
+single-assignment scope
+==================
+
+(x = 1)
+
+---
+
+(program
+  (scope
+    (assignment
+      lhs: (ident)
+      rhs: (number))))
+
+==================
+two statements
+==================
+
+a = 1
+b = 2
+
+---
+
+(program
+  (assignment
+    lhs: (ident)
+    rhs: (number))
+  (assignment
+    lhs: (ident)
+    rhs: (number)))

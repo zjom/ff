@@ -320,6 +320,28 @@ pub trait IntoNative<Args> {
     fn into_native(self, name: &'static str) -> Value;
 }
 
+/// Marker for the [`IntoNative`] impl on [`Value`] — lets a [`native!`]
+/// (which already produces a `Value::Native`) flow through [`members!`]
+/// alongside serde-style closures. The name supplied by [`native_fn`] /
+/// [`members!`] overrides whatever name the `native!` invocation used.
+pub struct RawNative;
+
+impl IntoNative<RawNative> for Value {
+    fn into_native(self, name: &'static str) -> Value {
+        match self {
+            Value::Native {
+                arity, applied, f, ..
+            } => Value::Native {
+                name,
+                arity,
+                applied,
+                f,
+            },
+            other => other,
+        }
+    }
+}
+
 fn json_to_value(j: Json) -> Value {
     match j {
         Json::Null => Value::Unit,

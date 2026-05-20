@@ -41,7 +41,7 @@
 //! use f2::interpreter::{Scope, eval_program};
 //! use f2::parser::parse;
 //! use f2::prelude;
-//! use serde::{Deserialize, Serialize};
+//! use f2::interop::{Deserialize, Serialize};
 //!
 //! #[derive(Serialize, Deserialize)]
 //! struct User { name: String, age: u32 }
@@ -78,9 +78,9 @@ use std::sync::Arc;
 
 use im::vector;
 use rug::{Integer, Rational};
-use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde::ser::{SerializeSeq, Serializer};
+pub use serde::{Deserialize, Serialize};
 use serde_json::{Number as JsonNumber, Value as Json};
 
 use crate::interpreter::{Env, NativeFn, RuntimeError, RuntimeResult, Value, define};

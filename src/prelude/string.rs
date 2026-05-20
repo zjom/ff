@@ -1,9 +1,12 @@
 use crate::interop::FfResult;
 use crate::interpreter::Value;
-use crate::members;
+use crate::{members, native};
 
 members! {
     "String",
+    of => native!("String.of", 1, |_env, args| {
+        Ok(Value::String(format!("{}", args[0]).into()))
+    }),
     len => |s: String| -> usize { s.chars().count() },
     upper => |s: String| -> String { s.to_uppercase() },
     lower => |s: String| -> String { s.to_lowercase() },

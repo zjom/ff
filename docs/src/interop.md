@@ -8,8 +8,8 @@ hand-written glue.
 ## Setting up an environment
 
 ```rust
-use ff::interpreter::Scope;
-use ff::prelude;
+use f2::interpreter::Scope;
+use f2::prelude;
 
 let env = Scope::new();
 prelude::install(&env);
@@ -22,7 +22,7 @@ wires up everything documented in the
 ## Pushing Rust values into ff
 
 ```rust
-use ff::interop::define_value;
+use f2::interop::define_value;
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -41,7 +41,7 @@ native function. Arguments deserialize from ff values; the return type
 serializes back.
 
 ```rust
-use ff::interop::register;
+use f2::interop::register;
 
 register(&env, "greet", |u: User| format!("Hello, {}!", u.name));
 ```
@@ -54,7 +54,7 @@ Scripts can now call `greet(me)` and either `greet(me)` or `greet(me)`
 Return `FfResult<T>` to surface a tagged pair to the caller:
 
 ```rust
-use ff::interop::FfResult;
+use f2::interop::FfResult;
 
 register(&env, "checked_div", |a: i64, b: i64| -> FfResult<i64> {
     if b == 0 {
@@ -84,8 +84,8 @@ register(&env, "read", |path: String| -> FfResult<String> {
 ## Evaluating scripts
 
 ```rust
-use ff::parser::parse;
-use ff::interpreter::eval_program;
+use f2::parser::parse;
+use f2::interpreter::eval_program;
 
 let prog = parse("greet(me)").unwrap();
 let result = eval_program(&prog, &env).unwrap();
@@ -96,7 +96,7 @@ assert_eq!(result.to_string(), "\"Hello, Ada!\"");
 internally. Use `from_value` to pull it back into a typed Rust value:
 
 ```rust
-use ff::interop::from_value;
+use f2::interop::from_value;
 
 let n: i64 = from_value(eval_program(&parse("21 * 2").unwrap(), &env).unwrap()).unwrap();
 assert_eq!(n, 42);
@@ -107,7 +107,7 @@ assert_eq!(n, 42);
 `register` is the right tool when arguments and return values are
 serde-friendly. For natives that need to inspect raw `Value`s — to
 build a lazy stream, accept polymorphic arguments, or call back into
-the actor runtime — use the `native!` macro from `ff::interop`. It
+the actor runtime — use the `native!` macro from `f2::interop`. It
 hands you the execution `Env` and an argument slice directly.
 
 See `src/prelude/fs.rs` for a worked example that mixes both styles:

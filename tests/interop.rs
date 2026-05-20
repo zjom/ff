@@ -1,7 +1,7 @@
-use ff::interop::{define_value, from_value, register, to_value};
-use ff::interpreter::{Scope, Value, eval_program};
-use ff::parser::parse;
-use ff::prelude;
+use f2::interop::{define_value, from_value, register, to_value};
+use f2::interpreter::{Scope, Value, eval_program};
+use f2::parser::parse;
+use f2::prelude;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -11,13 +11,13 @@ struct Person {
     tags: Vec<String>,
 }
 
-fn fresh_env() -> ff::interpreter::Env {
+fn fresh_env() -> f2::interpreter::Env {
     let env = Scope::new();
     prelude::install(&env);
     env
 }
 
-fn run(env: &ff::interpreter::Env, src: &str) -> Value {
+fn run(env: &f2::interpreter::Env, src: &str) -> Value {
     let prog = parse(src).expect("parse");
     eval_program(&prog, env).expect("eval")
 }

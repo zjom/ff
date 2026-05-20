@@ -201,8 +201,8 @@ fn param_wildcard() {
 fn param_literal_pattern_failure_is_runtime_error() {
     // Calling a function whose param pattern doesn't match should error.
     let src = "f = [:ok, v] => v\nf([:error, \"oops\"])";
-    let prog = ff::parser::parse(src).expect("parse");
-    assert!(ff::interpreter::run(&prog).is_err());
+    let prog = f2::parser::parse(src).expect("parse");
+    assert!(f2::interpreter::run(&prog).is_err());
 }
 
 #[test]

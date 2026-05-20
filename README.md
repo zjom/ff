@@ -346,10 +346,10 @@ blocks on until the target's handler returns.
 ## working with rust
 
 ```rust
-use ff::interop::{FfResult, define_value, register};
-use ff::interpreter::{Scope, eval_program};
-use ff::parser::parse;
-use ff::prelude;
+use f2::interop::{FfResult, define_value, register};
+use f2::interpreter::{Scope, eval_program};
+use f2::parser::parse;
+use f2::prelude;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]

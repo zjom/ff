@@ -118,7 +118,7 @@ fn match_arms_inline_with_commas() {
 #[test]
 fn match_missing_comma_is_parse_error() {
     // Newlines no longer separate arms; missing comma must fail to parse.
-    assert!(ff::parser::parse("match 1\n  0 -> \"zero\"\n  1 -> \"one\"").is_err());
+    assert!(f2::parser::parse("match 1\n  0 -> \"zero\"\n  1 -> \"one\"").is_err());
 }
 
 #[test]
@@ -151,8 +151,8 @@ fn match_single_line_with_atom_pattern() {
 fn match_pattern_failure_is_runtime_error() {
     // None of the arms match → runtime error (we test the error path elsewhere).
     let src = "match 99\n  0 -> 0,\n  1 -> 1";
-    let prog = ff::parser::parse(src).expect("parse");
-    assert!(ff::interpreter::run(&prog).is_err());
+    let prog = f2::parser::parse(src).expect("parse");
+    assert!(f2::interpreter::run(&prog).is_err());
 }
 
 // --- cons-pattern (`h :: t`) ------------------------------------------------
@@ -225,8 +225,8 @@ fn cons_pattern_chained_is_right_assoc() {
 #[test]
 fn cons_pattern_empty_fails_to_match() {
     let src = "match []\n  h :: t -> \"non-empty\"";
-    let prog = ff::parser::parse(src).expect("parse");
-    assert!(ff::interpreter::run(&prog).is_err());
+    let prog = f2::parser::parse(src).expect("parse");
+    assert!(f2::interpreter::run(&prog).is_err());
 }
 
 #[test]
@@ -277,15 +277,15 @@ fn match_guard_multiple_arms_same_pattern() {
 #[test]
 fn match_guard_failure_with_no_fallback_is_runtime_error() {
     let src = "match 5\n  n if n < 2 -> \"lt 2\"";
-    let prog = ff::parser::parse(src).expect("parse");
-    assert!(ff::interpreter::run(&prog).is_err());
+    let prog = f2::parser::parse(src).expect("parse");
+    assert!(f2::interpreter::run(&prog).is_err());
 }
 
 #[test]
 fn match_guard_non_bool_is_runtime_error() {
     let src = "match 1\n  n if 42 -> \"yes\"";
-    let prog = ff::parser::parse(src).expect("parse");
-    assert!(ff::interpreter::run(&prog).is_err());
+    let prog = f2::parser::parse(src).expect("parse");
+    assert!(f2::interpreter::run(&prog).is_err());
 }
 
 #[test]

@@ -37,10 +37,10 @@
 //! # End-to-end example
 //!
 //! ```
-//! use ff::interop::{FfResult, define_value, register};
-//! use ff::interpreter::{Scope, eval_program};
-//! use ff::parser::parse;
-//! use ff::prelude;
+//! use f2::interop::{FfResult, define_value, register};
+//! use f2::interpreter::{Scope, eval_program};
+//! use f2::parser::parse;
+//! use f2::prelude;
 //! use serde::{Deserialize, Serialize};
 //!
 //! #[derive(Serialize, Deserialize)]
@@ -92,10 +92,10 @@ use crate::interpreter::{Env, NativeFn, RuntimeError, RuntimeResult, Value, defi
 /// # Example
 ///
 /// ```
-/// use ff::interop::{FfResult, register};
-/// use ff::interpreter::{Scope, eval_program};
-/// use ff::parser::parse;
-/// use ff::prelude;
+/// use f2::interop::{FfResult, register};
+/// use f2::interpreter::{Scope, eval_program};
+/// use f2::parser::parse;
+/// use f2::prelude;
 ///
 /// let env = Scope::new();
 /// prelude::install(&env);
@@ -171,16 +171,16 @@ impl From<FfResult<Value>> for Value {
 /// # Example
 ///
 /// ```
-/// use ff::interpreter::{Scope, Value, eval_program};
-/// use ff::parser::parse;
-/// use ff::prelude;
-/// use ff::native;
+/// use f2::interpreter::{Scope, Value, eval_program};
+/// use f2::parser::parse;
+/// use f2::prelude;
+/// use f2::native;
 ///
 /// let env = Scope::new();
 /// prelude::install(&env);
 ///
 /// let pong = native!(0, |_env, _args| Ok(Value::String("pong".into())));
-/// ff::interpreter::define(&env, "pong", pong);
+/// f2::interpreter::define(&env, "pong", pong);
 ///
 /// let prog = parse("pong()").unwrap();
 /// assert_eq!(eval_program(&prog, &env).unwrap().to_string(), "\"pong\"");
@@ -252,7 +252,7 @@ macro_rules! __member_entry {
 /// # Example
 ///
 /// ```
-/// use ff::interop::to_value;
+/// use f2::interop::to_value;
 ///
 /// let v = to_value(&vec![1u32, 2, 3]).unwrap();
 /// assert_eq!(v.to_string(), "[1, 2, 3]");
@@ -269,7 +269,7 @@ pub fn to_value<T: Serialize + ?Sized>(t: &T) -> RuntimeResult<Value> {
 /// # Example
 ///
 /// ```
-/// use ff::interop::{from_value, to_value};
+/// use f2::interop::{from_value, to_value};
 ///
 /// let v = to_value(&vec![1u32, 2, 3]).unwrap();
 /// let back: Vec<u32> = from_value(v).unwrap();
@@ -286,10 +286,10 @@ pub fn from_value<T: DeserializeOwned>(v: Value) -> RuntimeResult<T> {
 /// # Example
 ///
 /// ```
-/// use ff::interop::define_value;
-/// use ff::interpreter::{Scope, eval_program};
-/// use ff::parser::parse;
-/// use ff::prelude;
+/// use f2::interop::define_value;
+/// use f2::interpreter::{Scope, eval_program};
+/// use f2::parser::parse;
+/// use f2::prelude;
 /// use serde::Serialize;
 ///
 /// #[derive(Serialize)]
@@ -316,8 +316,8 @@ pub fn define_value<T: Serialize + ?Sized>(env: &Env, name: &str, v: &T) -> Runt
 /// # Example
 ///
 /// ```
-/// use ff::interop::native_fn;
-/// use ff::interpreter::Value;
+/// use f2::interop::native_fn;
+/// use f2::interpreter::Value;
 ///
 /// let double = native_fn("double", |x: i64| x * 2);
 /// match double {
@@ -342,10 +342,10 @@ where
 /// # Example
 ///
 /// ```
-/// use ff::interop::register;
-/// use ff::interpreter::{Scope, eval_program};
-/// use ff::parser::parse;
-/// use ff::prelude;
+/// use f2::interop::register;
+/// use f2::interpreter::{Scope, eval_program};
+/// use f2::parser::parse;
+/// use f2::prelude;
 ///
 /// let env = Scope::new();
 /// prelude::install(&env);

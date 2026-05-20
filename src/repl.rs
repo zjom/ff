@@ -98,8 +98,13 @@ impl Repl {
         let mut rl = Editor::with_config(rlcfg)?;
         rl.set_helper(Some(helper));
 
-        // Try to load history from a local file
-        rl.load_history(&cfg.history_path)?;
+        // Try to load history from a local file. A missing file is not an error —
+        // it just means there's no prior history to restore.
+        match rl.load_history(&cfg.history_path) {
+            Ok(()) => {}
+            Err(ReadlineError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
+        }
 
         Ok(Self { cfg, rl })
     }

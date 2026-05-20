@@ -4,7 +4,7 @@ use crate::{members, native};
 
 members! {
     "String",
-    of => native!("String.of", 1, |_env, args| {
+    of => native!(1, |_env, args| {
         Ok(Value::String(format!("{}", args[0]).into()))
     }),
     len => |s: String| -> usize { s.chars().count() },

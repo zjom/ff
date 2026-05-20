@@ -1,17 +1,10 @@
-use crate::native;
 use crate::prelude::RuntimeError;
 use crate::prelude::Value;
+use crate::{members, native};
 
-pub fn members() -> Vec<(&'static str, Value)> {
-    vec![
-        ("get", get()),
-        ("put", put()),
-        ("keys", keys()),
-        ("values", values()),
-    ]
-}
-fn get() -> Value {
-    native!("object.get", 2, move |_env, args| {
+members! {
+    "Object",
+    get => native!(2, move |_env, args| {
         if let Value::Object(obj) = &args[1] {
             match obj.get(&args[0]) {
                 Some(value) => Ok(value.clone()),
@@ -19,48 +12,40 @@ fn get() -> Value {
             }
         } else {
             Err(RuntimeError::UnsupportedOperation(format!(
-                "object.get expected Object, found {}",
+                "Object.get expected Object, found {}",
                 args[1]
             )))
         }
-    })
-}
-fn put() -> Value {
-    native!("object.put", 3, move |_env, args| {
+    }),
+    put => native!(3, move |_env, args| {
         if let Value::Object(mut obj) = args[2].clone() {
             obj.insert(args[0].clone(), args[1].clone());
             Ok(Value::Object(obj))
         } else {
             Err(RuntimeError::UnsupportedOperation(format!(
-                "object.put expected Object, found {}",
+                "Object.put expected Object, found {}",
                 args[2]
             )))
         }
-    })
-}
-
-fn keys() -> Value {
-    native!("object.keys", 1, move |_env, args| {
+    }),
+    keys => native!(1, move |_env, args| {
         if let Value::Object(obj) = &args[0] {
             Ok(Value::List(obj.keys().cloned().collect()))
         } else {
             Err(RuntimeError::UnsupportedOperation(format!(
-                "object.keys expected Object, found {}",
+                "Object.keys expected Object, found {}",
                 args[0]
             )))
         }
-    })
-}
-
-fn values() -> Value {
-    native!("object.values", 1, move |_env, args| {
+    }),
+    values => native!(1, move |_env, args| {
         if let Value::Object(obj) = &args[0] {
             Ok(Value::List(obj.values().cloned().collect()))
         } else {
             Err(RuntimeError::UnsupportedOperation(format!(
-                "object.values expected Object, found {}",
+                "Object.values expected Object, found {}",
                 args[0]
             )))
         }
-    })
+    }),
 }

@@ -2,33 +2,11 @@ use im::{HashMap, HashSet, Vector};
 use rug::Rational;
 
 use crate::interpreter::{RuntimeError, Value, ctx_of, type_name};
-use crate::native;
+use crate::{members, native};
 
-pub fn members() -> Vec<(&'static str, Value)> {
-    vec![
-        ("::", cons()),
-        ("print", print()),
-        ("typeof", type_of()),
-        ("println", println()),
-        ("panic", panic()),
-        ("default", default()),
-    ]
-}
-
-fn type_of() -> Value {
-    native!("typeof", 1, |_env, args| {
-        Ok(Value::Atom(type_name(&args[0]).into()))
-    })
-}
-
-fn panic() -> Value {
-    native!("panic", 1, |_env, args| {
-        Err(RuntimeError::Panic(args[0].to_string()))
-    })
-}
-
-fn cons() -> Value {
-    native!("::", 2, |_env, args| {
+members! {
+    "",
+    "::" => native!(2, |_env, args| {
         match (args[0].clone(), args[1].clone()) {
             (v, Value::List(mut xs)) => {
                 xs.push_front(v);
@@ -60,11 +38,29 @@ fn cons() -> Value {
                 left, right
             ))),
         }
-    })
-}
-
-fn default() -> Value {
-    native!("default", 1, |_env, args| {
+    }),
+    print => native!(1, |env, args| {
+        let s = &args[0].to_string();
+        let ctx = ctx_of(env);
+        if ctx.is_interactive {
+            writeln!(ctx_of(env).out.lock().unwrap(), "{}", s)?;
+        } else {
+            write!(ctx_of(env).out.lock().unwrap(), "{}", s)?;
+        }
+        Ok(Value::Unit)
+    }),
+    println => native!(1, |env, args| {
+        let s = &args[0].to_string();
+        writeln!(ctx_of(env).out.lock().unwrap(), "{}", s)?;
+        Ok(Value::Unit)
+    }),
+    "typeof" => native!(1, |_env, args| {
+        Ok(Value::Atom(type_name(&args[0]).into()))
+    }),
+    panic => native!(1, |_env, args| {
+        Err(RuntimeError::Panic(args[0].to_string()))
+    }),
+    default => native!(1, |_env, args| {
         Ok(match &args[0] {
             Value::Unit => Value::Unit,
             Value::Number(_) => Value::Number(Rational::new().into()),
@@ -92,25 +88,5 @@ fn default() -> Value {
                 )));
             }
         })
-    })
-}
-
-fn print() -> Value {
-    native!("io.print", 1, |env, args| {
-        let s = &args[0].to_string();
-        let ctx = ctx_of(env);
-        if ctx.is_interactive {
-            writeln!(ctx_of(env).out.lock().unwrap(), "{}", s)?;
-        } else {
-            write!(ctx_of(env).out.lock().unwrap(), "{}", s)?;
-        }
-        Ok(Value::Unit)
-    })
-}
-fn println() -> Value {
-    native!("io.println", 1, |env, args| {
-        let s = &args[0].to_string();
-        writeln!(ctx_of(env).out.lock().unwrap(), "{}", s)?;
-        Ok(Value::Unit)
-    })
+    }),
 }

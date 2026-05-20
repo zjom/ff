@@ -11,31 +11,30 @@ use std::sync::{Arc, Mutex};
 
 use crate::prelude::Value;
 
-pub fn members() -> Vec<(&'static str, Value)> {
-    vec![
-        ("stdin", stdin()),
-        ("stdout", stdout()),
-        ("stderr", stderr()),
-    ]
-}
-
-fn stdin() -> Value {
-    native!("Io.stdin", 0, move |_, _| Ok(Stdin::object()))
+members! {
+    "Io",
+    stdin => native!(0, move |_, _| Ok(Stdin::object())),
+    stdout => native!(0, move |_, _| Ok(Stdout::object())),
+    stderr => native!(0, move |_, _| Ok(Stderr::object())),
 }
 
 struct Stdin {}
 impl Stdin {
     fn object() -> Value {
-        let entries = vec![("bytes", Self::bytes_fn()), ("lines", Self::lines_fn())];
-
-        object(entries)
+        object(Self::members())
     }
 
-    fn bytes_fn() -> Value {
-        native!("stdin.bytes", 0, move |_env, _args| {
+    members! {
+        "stdin",
+        bytes => native!(0, move |_env, _args| {
             let reader = BufReader::new(std::io::stdin());
             Ok(ok_tuple(Self::bytes_stream(reader.bytes())?))
-        })
+        }),
+        lines => native!(0, move |_env, _args| {
+            Ok(ok_tuple(Self::lines_stream(BufReader::new(
+                std::io::stdin(),
+            ))?))
+        }),
     }
 
     fn bytes_stream(mut bytes: Bytes<BufReader<std::io::Stdin>>) -> RuntimeResult<Value> {
@@ -54,14 +53,6 @@ impl Stdin {
             },
             None => Ok(Value::List(Vector::new())),
         }
-    }
-
-    fn lines_fn() -> Value {
-        native!("stdin.lines", 0, move |_env, _args| {
-            Ok(ok_tuple(Self::lines_stream(BufReader::new(
-                std::io::stdin(),
-            ))?))
-        })
     }
 
     // Walk a `BufReader` one line at a time, producing a `Cons` spine whose tail
@@ -96,10 +87,6 @@ fn strip_line_ending(s: &mut String) {
     }
 }
 
-fn stdout() -> Value {
-    native!("Io.stdout", 0, move |_, _| Ok(Stdout::object()))
-}
-
 struct Stdout {}
 impl Stdout {
     fn object() -> Value {
@@ -118,10 +105,6 @@ impl Stdout {
             std::io::stderr().flush().into()
         }
     }
-}
-
-fn stderr() -> Value {
-    native!("Io.stderr", 0, move |_, _| Ok(Stderr::object()))
 }
 
 struct Stderr {}

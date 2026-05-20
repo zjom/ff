@@ -158,9 +158,11 @@ impl From<FfResult<Value>> for Value {
     }
 }
 
-/// Build a `Value::Native` with the given name, arity, and body. The body is
+/// Build a nameless `Value::Native` with the given arity and body. The body is
 /// `Fn(&Env, &[Value]) -> RuntimeResult<Value>`; arity-checking and partial
-/// application are handled by the interpreter's Call dispatch.
+/// application are handled by the interpreter's Call dispatch. The native's
+/// display name is empty by default — use [`members!`](crate::members) (or
+/// [`native_fn`] / [`register`]) to attach a name when binding it.
 ///
 /// Prefer [`native_fn`] / [`register`] when arguments and return values can be
 /// (de)serialized — use this only when the native needs to inspect raw
@@ -177,7 +179,7 @@ impl From<FfResult<Value>> for Value {
 /// let env = Scope::new();
 /// prelude::install(&env);
 ///
-/// let pong = native!("pong", 0, |_env, _args| Ok(Value::String("pong".into())));
+/// let pong = native!(0, |_env, _args| Ok(Value::String("pong".into())));
 /// ff::interpreter::define(&env, "pong", pong);
 ///
 /// let prog = parse("pong()").unwrap();
@@ -185,9 +187,9 @@ impl From<FfResult<Value>> for Value {
 /// ```
 #[macro_export]
 macro_rules! native {
-    ($name:expr, $arity:expr, $body:expr) => {
+    ($arity:expr, $body:expr) => {
         $crate::interpreter::Value::Native {
-            name: $name,
+            name: "",
             arity: $arity,
             applied: Vec::new(),
             f: $crate::interpreter::NativeFn(std::sync::Arc::new($body)),

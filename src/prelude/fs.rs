@@ -1,4 +1,4 @@
-use crate::interop::{FfResult, native_fn};
+use crate::interop::FfResult;
 use crate::prelude::{err_str_tuple, object, ok_tuple};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Bytes, Read, Write};
@@ -9,24 +9,27 @@ use im::Vector;
 use serde::Serialize;
 
 use crate::interpreter::{LazyState, RuntimeError, RuntimeResult, Value, type_name};
-use crate::native;
+use crate::{members, native};
 
-pub fn members() -> Vec<(&'static str, Value)> {
-    vec![
-        ("open", file_open()),
-        ("exists", exists()),
-        ("read_dir", dir_read()),
-    ]
-}
-
-fn exists() -> Value {
-    native_fn("Fs.exists", move |path: String| -> FfResult<bool> {
+members! {
+    "Fs",
+    open => native!(1, move |_env, args| {
+        let Value::String(path) = &args[0] else {
+            return Err(RuntimeError::NativeTypeError {
+                native: "Fs.open",
+                expected: "string",
+                got: type_name(&args[0]),
+            });
+        };
+        if !Path::new(&**path).exists() {
+            err_str_tuple("File not exists");
+        }
+        Ok(file_object(path.clone()))
+    }),
+    exists => |path: String| -> FfResult<bool> {
         fs::exists(path).into()
-    })
-}
-
-fn dir_read() -> Value {
-    native!("Fs.read_dir", 1, move |_env, args| {
+    },
+    read_dir => native!(1, move |_env, args| {
         let Value::String(path) = &args[0] else {
             return Err(RuntimeError::NativeTypeError {
                 native: "Fs.read_dir",
@@ -38,7 +41,7 @@ fn dir_read() -> Value {
             Ok(iter) => ok_tuple(dir_stream(iter)?),
             Err(e) => err_str_tuple(e.to_string()),
         })
-    })
+    }),
 }
 
 fn dir_stream(mut iter: fs::ReadDir) -> RuntimeResult<Value> {
@@ -75,22 +78,10 @@ fn dir_entry_object(entry: fs::DirEntry) -> Value {
     ])
 }
 
-fn file_open() -> Value {
-    native!("Fs.open", 1, move |_env, args| {
-        let Value::String(path) = &args[0] else {
-            return Err(RuntimeError::NativeTypeError {
-                native: "open_file",
-                expected: "string",
-                got: type_name(&args[0]),
-            });
-        };
-        if !Path::new(&**path).exists() {
-            err_str_tuple("File not exists");
-        }
-        Ok(file_object(path.clone()))
-    })
-}
-
+// A file handle object: a few static fields (path) plus a fixed set of
+// callable methods. The methods can't be a `members!` block because they
+// all close over `path` — `members!` produces a single `fn members()` and
+// can't capture per-instance state.
 fn file_object(path: Arc<str>) -> Value {
     let entries = vec![
         ("path", Value::String(path.clone())),
@@ -105,13 +96,13 @@ fn file_object(path: Arc<str>) -> Value {
 }
 
 fn write_fn(path: Arc<str>) -> Value {
-    native_fn("file.write", move |data: String| -> FfResult<()> {
+    crate::interop::native_fn("file.write", move |data: String| -> FfResult<()> {
         std::fs::write(&*path, &data).into()
     })
 }
 
 fn append_fn(path: Arc<str>) -> Value {
-    native_fn("file.append", move |data: String| -> FfResult<()> {
+    crate::interop::native_fn("file.append", move |data: String| -> FfResult<()> {
         std::fs::OpenOptions::new()
             .append(true)
             .open(&*path)
@@ -121,13 +112,13 @@ fn append_fn(path: Arc<str>) -> Value {
 }
 
 fn read_all(path: Arc<str>) -> Value {
-    native_fn("file.read_all", move || -> FfResult<String> {
+    crate::interop::native_fn("file.read_all", move || -> FfResult<String> {
         std::fs::read_to_string(&*path).into()
     })
 }
 
 fn bytes_fn(path: Arc<str>) -> Value {
-    native!("file.bytes", 0, move |_env, _args| {
+    native!(0, move |_env, _args| {
         Ok(match File::open(&*path) {
             Ok(f) => {
                 let reader = BufReader::new(f);
@@ -164,7 +155,7 @@ struct FileMetadata {
 }
 
 fn metadata_fn(path: Arc<str>) -> Value {
-    native_fn("file.metadata", move || -> FfResult<FileMetadata> {
+    crate::interop::native_fn("file.metadata", move || -> FfResult<FileMetadata> {
         fs::metadata(&*path)
             .map(|m| FileMetadata {
                 size: m.len(),
@@ -176,7 +167,7 @@ fn metadata_fn(path: Arc<str>) -> Value {
 }
 
 fn lines_fn(path: Arc<str>) -> Value {
-    native!("file.lines", 0, move |_env, _args| {
+    native!(0, move |_env, _args| {
         Ok(match File::open(&*path) {
             Ok(f) => ok_tuple(lines_stream(BufReader::new(f))?),
             Err(e) => err_str_tuple(e.to_string()),

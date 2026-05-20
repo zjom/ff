@@ -1,8 +1,6 @@
 use crate::members;
 use std::collections::HashMap;
 
-use crate::interpreter::Value;
-
 members! {
     "Env",
     args => || std::env::args().collect::<Vec<String>>(),

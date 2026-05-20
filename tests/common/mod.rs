@@ -1,6 +1,6 @@
 #![allow(dead_code)]
-use ff::interpreter::run;
-use ff::parser::parse;
+use f2::interpreter::run;
+use f2::parser::parse;
 
 pub fn eval(src: &str) -> String {
     let prog =

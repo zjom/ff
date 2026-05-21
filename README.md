@@ -4,6 +4,8 @@
 
 a small, highly extensible, functional language with strong rust interoperability and native actor based concurrency.
 
+[book](https://zjom.github.com/ff-book)
+
 ## at a glance
 
 ```ff

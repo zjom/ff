@@ -19,6 +19,10 @@ take = (n, xs) => if n <= 0 then default(xs) else match xs
   y :: rest -> y :: take(n-1, rest),
   none -> none
 
+take_while = (p, xs) => match xs
+  x :: rest -> if p(x) then x ::take_while(p, rest) else default(xs),
+  none -> none
+
 reduce = (f, acc, xs) => match xs
   y :: rest -> reduce(f, f(acc, y), rest),
   _ -> acc
@@ -40,4 +44,4 @@ assert = args => (
 Object = import "Object"
 Actor = import "Actor"
 
-export (|>), (<<), (>>), map, filter, take, rev, reduce, fold, assert, Object, Actor
+export (|>), (<<), (>>), map, filter, take, take_while, rev, reduce, fold, assert, Object, Actor

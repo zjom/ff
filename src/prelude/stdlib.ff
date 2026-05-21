@@ -6,8 +6,8 @@ map = (f, xs) => match xs
   x :: rest -> f(x) :: map(f, rest),
   none -> none
 
-filter = (f,xs) => match xs
-  x :: rest -> if f(x) then x :: filter(f,rest) else filter(f,rest),
+filter = (p,xs) => match xs
+  x :: rest -> if p(x) then x :: filter(p,rest) else filter(p,rest),
   none -> none
 
 rev_into = (xs, acc) => match xs

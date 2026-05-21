@@ -6,8 +6,8 @@ map = (f, xs) => match xs
   x :: rest -> f(x) :: map(f, rest),
   none -> none
 
-filter = (p,xs) => match xs
-  x :: rest -> if p(x) then x :: filter(p,rest) else filter(p,rest),
+filter = (p, xs) => match xs
+  x :: rest -> if p(x) then x :: filter(p, rest) else filter(p, rest),
   none -> none
 
 rev_into = (xs, acc) => match xs
@@ -33,7 +33,7 @@ fold = (f, acc, xs) => match xs
 
 assert = args => (
   [val, msg] = match args
-    [val,msg] -> [val,msg],
+    [val, msg] -> [val, msg],
     val -> [val, "assert failed"]
 
   if val != default(val)

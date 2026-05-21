@@ -16,7 +16,7 @@ keyword = @{
 // `!"."` lookahead on the fractional dot keeps `0..` from being read as `0.`
 // followed by `.` — the range syntax `[a..b]` needs the bare `..` to survive.
 number   = @{ ASCII_DIGIT+ ~ ("." ~ !"." ~ ASCII_DIGIT*)? }
-string   = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+string   = @{ "\"" ~ ("\\" ~ ANY | !"\"" ~ ANY)* ~ "\"" }
 bool     = @{ ("true" | "false") ~ !(ASCII_ALPHANUMERIC | "_") }
 ident    = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 wildcard = @{ "_" ~ !(ASCII_ALPHANUMERIC | "_") }

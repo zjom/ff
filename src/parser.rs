@@ -440,7 +440,29 @@ fn build_primary(pair: Pair<Rule>) -> Result<Expr> {
 }
 
 fn unquote(s: &str) -> String {
-    s[1..s.len() - 1].to_string()
+    let inner = &s[1..s.len() - 1];
+    let mut out = String::with_capacity(inner.len());
+    let mut chars = inner.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('t') => out.push('\t'),
+            Some('r') => out.push('\r'),
+            Some('0') => out.push('\0'),
+            Some('\\') => out.push('\\'),
+            Some('"') => out.push('"'),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
 }
 
 // The grammar guarantees `ASCII_DIGIT+ ("." ASCII_DIGIT*)?`, so the integer

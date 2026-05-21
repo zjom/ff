@@ -5,7 +5,7 @@ all notable changes to this project will be documented in this file.
 the format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## [UNPUBLISHED] - 2025-05-21
+## [0.1.6] - 2025-05-21
 
 ### Added
 - String escape sequences:

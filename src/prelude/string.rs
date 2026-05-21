@@ -20,6 +20,9 @@ members! {
     split => |sep: String, s: String| -> Vec<String> {
         s.split(&sep).map(|p| p.to_string()).collect()
     },
+    split_at => |i: usize, s: String| -> Vec<String> {
+        s.split_at_checked(i).map(|(a,b)| vec![a.into(),b.into()]).unwrap_or(vec![s, String::new()])
+    },
     lines => |s: String| -> Vec<String> {
         s.lines().map(|l| l.to_string()).collect()
     },

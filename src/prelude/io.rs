@@ -64,7 +64,6 @@ impl Stdin {
         match reader.read_line(&mut buf) {
             Ok(0) => Ok(Value::List(Vector::new())),
             Ok(_) => {
-                strip_line_ending(&mut buf);
                 let tail = Arc::new(Mutex::new(LazyState::Native(Box::new(move || {
                     Self::lines_stream(reader)
                 }))));
@@ -74,15 +73,6 @@ impl Stdin {
                 })
             }
             Err(e) => Ok(err_str_tuple(e.to_string())),
-        }
-    }
-}
-
-fn strip_line_ending(s: &mut String) {
-    if s.ends_with('\n') {
-        s.pop();
-        if s.ends_with('\r') {
-            s.pop();
         }
     }
 }

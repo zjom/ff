@@ -223,11 +223,26 @@ fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
                 })
             }
             Rule::juxt_arg => {
-                let inner = op
-                    .into_inner()
+                let mut inner = op.into_inner();
+                let primary = inner
                     .next()
                     .ok_or_else(|| anyhow!("empty juxt_arg"))?;
-                let arg = build_primary(inner)?;
+                let mut arg = build_primary(primary)?;
+                for dot in inner {
+                    let key_inner = dot
+                        .into_inner()
+                        .next()
+                        .ok_or_else(|| anyhow!("empty dot"))?;
+                    let key = match key_inner.as_rule() {
+                        Rule::dot_index => AccessKey::Index(key_inner.as_str().parse()?),
+                        Rule::ident => AccessKey::Name(key_inner.as_str().to_string()),
+                        r => return Err(anyhow!("unexpected dot key: {:?}", r)),
+                    };
+                    arg = Expr::Access {
+                        target: Box::new(arg),
+                        key,
+                    };
+                }
                 Ok(Expr::Call {
                     callee: Box::new(lhs?),
                     args: vec![arg],

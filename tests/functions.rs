@@ -99,6 +99,18 @@ fn juxt_tighter_than_infix() {
 }
 
 #[test]
+fn dot_access_tighter_than_juxt() {
+    // `f x.y` must parse as `f(x.y)`, not `(f x).y`. Without this, piping a
+    // module member as a function (e.g. `xs |> map String.trim`) is unusable.
+    assert_eq!(
+        eval("m = {:trim: s => s}\nid = x => x\nid m.trim(\"hi\")"),
+        "\"hi\""
+    );
+    // Nested dot access in a juxt argument.
+    assert_eq!(eval("id = x => x\nid [[1, 2], [3, 4]].0.1"), "2");
+}
+
+#[test]
 fn function_as_argument() {
     assert_eq!(
         eval("apply = (f, x) => f(x)\napply((y) => y * 2, 21)"),

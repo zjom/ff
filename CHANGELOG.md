@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   display). `{{` and `}}` are literal braces. Args are a list (or any
   cons-spine), so `args |> String.format("...")` composes naturally.
 
+### Fixed
+- Dot access now binds tighter than juxtaposition, so `map String.trim` parses
+  as `map(String.trim)` instead of `(map String).trim`. Lets module members
+  flow through `|>` without parens: `xs |> map String.trim`.
+
 
 ## [0.1.5] - 2025-05-21
 

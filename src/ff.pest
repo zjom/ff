@@ -96,7 +96,9 @@ dot_access = { "." ~ (dot_index | ident) }
 
 // Function application by juxtaposition: `f x` is `f(x)`. Each juxt_arg
 // consumes one primary, so `f g h` chains left-associatively as `(f g) h`.
-juxt_arg = { primary }
+// Trailing `dot_access`es are absorbed into the argument so `map String.trim`
+// parses as `map(String.trim)`, not `(map String).trim`.
+juxt_arg = { primary ~ dot_access* }
 infix_op   = _{
       power
     | multiply | divide | modulo

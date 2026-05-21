@@ -252,31 +252,33 @@ fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
         })
         .map_infix(|lhs, op, rhs| {
             let binop = match op.as_rule() {
-                Rule::power => BinaryOp::Pow,
-                Rule::multiply => BinaryOp::Mul,
-                Rule::divide => BinaryOp::Div,
-                Rule::modulo => BinaryOp::Mod,
-                Rule::add => BinaryOp::Add,
-                Rule::subtract => BinaryOp::Sub,
-                Rule::eq => BinaryOp::Eq,
-                Rule::ne => BinaryOp::Ne,
-                Rule::lt => BinaryOp::Lt,
-                Rule::le => BinaryOp::Le,
-                Rule::gt => BinaryOp::Gt,
-                Rule::ge => BinaryOp::Ge,
                 Rule::logical_and => BinaryOp::And,
                 Rule::logical_or => BinaryOp::Or,
-                Rule::match_op => BinaryOp::Match,
-                Rule::not_match => BinaryOp::NotMatch,
                 Rule::cons_op => BinaryOp::Cons,
-                Rule::custom_op_pow
+                // Every other built-in infix operator is a regular variable
+                // bound in the prelude: `a OP b` desugars to `(OP)(a)(b)`,
+                // identical to how user-defined custom operators are handled.
+                Rule::power
+                | Rule::multiply
+                | Rule::divide
+                | Rule::modulo
+                | Rule::add
+                | Rule::subtract
+                | Rule::eq
+                | Rule::ne
+                | Rule::lt
+                | Rule::le
+                | Rule::gt
+                | Rule::ge
+                | Rule::match_op
+                | Rule::not_match
+                | Rule::custom_op_pow
                 | Rule::custom_op_mult
                 | Rule::custom_op_add
                 | Rule::custom_op_cat
                 | Rule::custom_op_comp
                 | Rule::custom_op_and
                 | Rule::custom_op_or => {
-                    // Curried call: `a OP b` desugars to `(OP)(a)(b)`.
                     let name = Expr::Ident(op.as_str().to_string());
                     return Ok(Expr::Call {
                         callee: Box::new(Expr::Call {

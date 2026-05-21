@@ -89,13 +89,6 @@ pub enum RuntimeError {
         type_name: &'static str,
     },
 
-    #[error("cannot apply {op:?} to {lhs} and {rhs}")]
-    BinaryTypeError {
-        op: BinaryOp,
-        lhs: &'static str,
-        rhs: &'static str,
-    },
-
     #[error("division by zero")]
     DivisionByZero,
 

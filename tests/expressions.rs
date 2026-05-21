@@ -39,11 +39,6 @@ fn power_right_associative() {
 }
 
 #[test]
-fn power_caret_alias() {
-    assert_eq!(eval("3 ^ 2"), "9");
-}
-
-#[test]
 fn integer_modulo() {
     assert_eq!(eval("10 % 3"), "1");
 }
@@ -57,7 +52,7 @@ fn unary_neg_and_not() {
 
 #[test]
 fn string_concatenation() {
-    assert_eq!(eval(r#""foo" + "bar""#), r#""foobar""#);
+    assert_eq!(eval(r#""foo" :: "bar""#), r#""foobar""#);
 }
 
 #[test]

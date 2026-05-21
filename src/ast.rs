@@ -122,24 +122,13 @@ pub enum UnaryOp {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOp {
-    Pow,
-    Mul,
-    Div,
-    Mod,
-    Add,
-    Sub,
-    Eq,
-    Ne,
-    Lt,
-    Le,
-    Gt,
-    Ge,
+    // Only the three operators with non-strict semantics survive as dedicated
+    // AST nodes. `&&` / `||` short-circuit on the lhs; `::` captures the rhs
+    // as a thunk so recursive stdlib builders like `f(x) :: map(f, rest)`
+    // don't force their tail until pattern-matched. Every other infix
+    // operator (`+`, `-`, `==`, ...) is a regular variable bound in the
+    // prelude — the parser desugars `a OP b` to `(OP)(a)(b)`.
     And,
     Or,
-    Match,
-    NotMatch,
-    // `a :: b` — non-strict in `b`. Evaluates lhs eagerly and captures rhs as
-    // a thunk so recursive stdlib builders like `f(x) :: map(f, rest)` don't
-    // force their tail until pattern-matched.
     Cons,
 }

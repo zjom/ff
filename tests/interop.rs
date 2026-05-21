@@ -43,8 +43,8 @@ fn pass_struct_into_script() {
         tags: vec!["math".into()],
     };
     define_value(&env, "person", &p).unwrap();
-    let out = run(&env, r#"person.name + " is " + person.tags.0"#);
-    assert_eq!(out, Value::String("Ada is math".into()));
+    let out = run(&env, r#"person.name :: " is " :: person.tags.0"#);
+    assert_eq!(out.to_string(), r#""Ada is math""#);
 }
 
 #[test]

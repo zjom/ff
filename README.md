@@ -9,14 +9,14 @@ a small, highly extensible, functional language with strong rust interoperabilit
 ## at a glance
 
 ```ff
-# arithmetic is exact-rational; `**` and `^` are power
+# arithmetic is exact-rational; `**` is power
 1 + 2 * 3          # 7
 2 ** 10            # 1024
 1 / 3 + 1 / 3      # 2/3 — no floating-point drift
 
 # bindings are immutable within a scope; rebinding shadows
 greeting = "hello"
-println(greeting + ", world")
+println(greeting :: ", world")
 ```
 
 ## values
@@ -24,7 +24,7 @@ println(greeting + ", world")
 ```ff
 # numbers, strings, bools
 42
-"abc" + "def"      # "abcdef"
+"abc" :: "def"     # "abcdef"
 true && !false     # true
 
 # `()` is the unit value

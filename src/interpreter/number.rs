@@ -3,7 +3,7 @@ use rug::{Integer, Rational};
 use super::error::{RuntimeError, RuntimeResult};
 
 // Truncated-toward-zero modulo on rationals: a - b * trunc(a / b).
-pub(super) fn rat_mod(a: &Rational, b: &Rational) -> Rational {
+pub fn rat_mod(a: &Rational, b: &Rational) -> Rational {
     let q = Rational::from(a / b);
     let (num, den) = q.into_numer_denom();
     let trunc = Integer::from(&num / &den);
@@ -12,7 +12,7 @@ pub(super) fn rat_mod(a: &Rational, b: &Rational) -> Rational {
 
 // `**` requires an integer exponent; non-integer exponents would produce
 // irrationals that don't fit in Rational.
-pub(super) fn rat_pow(base: &Rational, exp: &Rational) -> RuntimeResult<Rational> {
+pub fn rat_pow(base: &Rational, exp: &Rational) -> RuntimeResult<Rational> {
     if exp.denom() != &Integer::from(1) {
         return Err(RuntimeError::PowNonIntegerExponent(format_rational(exp)));
     }

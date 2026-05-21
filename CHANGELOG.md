@@ -16,6 +16,18 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   display). `{{` and `}}` are literal braces. Args are a list (or any
   cons-spine), so `args |> String.format("...")` composes naturally.
 
+### Changed
+- **BREAKING** Built-in infix operators (`+`, `-`, `*`, `/`, `%`, `**`, `==`,
+  `!=`, `<`, `<=`, `>`, `>=`, `~`, `!~`) are now ordinary variables bound in
+  the prelude — same model as user-defined operators. `1 + 2` desugars to
+  `(+)(1)(2)`, so you can write `inc = (+)(1)`, `plus = (+)`, or shadow them
+  with `(+) = (a, b) => ...`. `&&`, `||`, and `::` keep their special AST
+  forms because they have non-strict semantics regular functions can't
+  reproduce.
+- **BREAKING** `+` is number-only. String concatenation lives on `::`
+  (which already supported it), e.g. `"foo" :: "bar"` → `"foobar"`.
+- **BREAKING** `^` removed as a power-operator alias. Use `**`.
+
 ### Fixed
 - Dot access now binds tighter than juxtaposition, so `map String.trim` parses
   as `map(String.trim)` instead of `(map String).trim`. Lets module members

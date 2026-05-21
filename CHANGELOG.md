@@ -5,6 +5,18 @@ all notable changes to this project will be documented in this file.
 the format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [UNPUBLISHED] - 2025-05-21
+
+### Added
+- String escape sequences:
+  - `\n`, `\t`, `\r`, `\0`, `\\`
+- `String.format(template, args)`
+  Rust-`format!`-style interpolation. `{}` consumes the next arg, `{N}` picks by
+  index, `{:?}` / `{N:?}` quote strings (and otherwise match the default value
+  display). `{{` and `}}` are literal braces. Args are a list (or any
+  cons-spine), so `args |> String.format("...")` composes naturally.
+
+
 ## [0.1.5] - 2025-05-21
 
 improvements to stdlib `String` module

@@ -1,11 +1,26 @@
 use crate::interop::FfResult;
-use crate::interpreter::Value;
+use crate::interpreter::{RuntimeError, RuntimeResult, Value, force_tail, type_name};
 use crate::{members, native};
 
 members! {
     "String",
     of => native!(1, |_env, args| {
         Ok(Value::String(format!("{}", args[0]).into()))
+    }),
+    // Rust `format!`-style: `{}` interpolates the next arg, `{N}` the Nth,
+    // `{:?}` / `{N:?}` use the debug-style display (strings are quoted, atoms
+    // keep their `:`). `{{` and `}}` are literal braces.
+    format => native!(2, |_env, args| {
+        let Value::String(template) = &args[0] else {
+            return Err(RuntimeError::NativeTypeError {
+                native: "String.format",
+                expected: "string",
+                got: type_name(&args[0]),
+            });
+        };
+        let template = template.to_string();
+        let fargs = as_seq("String.format", &args[1])?;
+        format_template(&template, &fargs).map(|s| Value::String(s.into()))
     }),
     len => |s: String| -> usize { s.chars().count() },
     upper => |s: String| -> String { s.to_uppercase() },
@@ -51,4 +66,133 @@ members! {
     parse_float => |s: String| -> FfResult<f64> {
         s.trim().parse::<f64>().map_err(|e| e.to_string()).into()
     },
+}
+
+fn as_seq(native: &'static str, v: &Value) -> RuntimeResult<Vec<Value>> {
+    match v {
+        Value::List(xs) => Ok(xs.iter().cloned().collect()),
+        Value::Cons { head, tail } => {
+            let mut items = vec![(**head).clone()];
+            let mut cur = tail.clone();
+            loop {
+                match force_tail(&cur)? {
+                    Value::Cons { head, tail } => {
+                        items.push((*head).clone());
+                        cur = tail;
+                    }
+                    Value::List(xs) => {
+                        items.extend(xs.iter().cloned());
+                        return Ok(items);
+                    }
+                    Value::Unit => return Ok(items),
+                    other => {
+                        return Err(RuntimeError::UnsupportedOperation(format!(
+                            "cons tail is not a list: {}",
+                            other
+                        )));
+                    }
+                }
+            }
+        }
+        other => Err(RuntimeError::NativeTypeError {
+            native,
+            expected: "list",
+            got: type_name(other),
+        }),
+    }
+}
+
+fn format_template(template: &str, args: &[Value]) -> RuntimeResult<String> {
+    let mut out = String::new();
+    let mut chars = template.chars().peekable();
+    let mut next_idx: usize = 0;
+    while let Some(c) = chars.next() {
+        match c {
+            '{' => {
+                if chars.peek() == Some(&'{') {
+                    chars.next();
+                    out.push('{');
+                    continue;
+                }
+                let mut spec = String::new();
+                let mut closed = false;
+                for nc in chars.by_ref() {
+                    if nc == '}' {
+                        closed = true;
+                        break;
+                    }
+                    spec.push(nc);
+                }
+                if !closed {
+                    return Err(RuntimeError::UnsupportedOperation(
+                        "String.format: unclosed `{` in template".into(),
+                    ));
+                }
+                let (idx, debug) = parse_spec(&spec, &mut next_idx)?;
+                let v = args.get(idx).ok_or_else(|| {
+                    RuntimeError::UnsupportedOperation(format!(
+                        "String.format: missing argument {} (got {} arg(s))",
+                        idx,
+                        args.len()
+                    ))
+                })?;
+                if debug {
+                    out.push_str(&v.to_string());
+                } else {
+                    push_display(&mut out, v);
+                }
+            }
+            '}' => {
+                if chars.peek() == Some(&'}') {
+                    chars.next();
+                    out.push('}');
+                } else {
+                    return Err(RuntimeError::UnsupportedOperation(
+                        "String.format: stray `}` in template (use `}}` for a literal)".into(),
+                    ));
+                }
+            }
+            other => out.push(other),
+        }
+    }
+    Ok(out)
+}
+
+fn parse_spec(spec: &str, next_idx: &mut usize) -> RuntimeResult<(usize, bool)> {
+    let (idx_part, fmt_part) = match spec.find(':') {
+        Some(i) => (&spec[..i], &spec[i + 1..]),
+        None => (spec, ""),
+    };
+    let idx = if idx_part.is_empty() {
+        let i = *next_idx;
+        *next_idx += 1;
+        i
+    } else {
+        idx_part.parse::<usize>().map_err(|_| {
+            RuntimeError::UnsupportedOperation(format!(
+                "String.format: invalid argument index `{}`",
+                idx_part
+            ))
+        })?
+    };
+    let debug = match fmt_part {
+        "" => false,
+        "?" => true,
+        other => {
+            return Err(RuntimeError::UnsupportedOperation(format!(
+                "String.format: unsupported spec `:{}`",
+                other
+            )));
+        }
+    };
+    Ok((idx, debug))
+}
+
+// Rust-`Display`-flavored rendering: strings drop their quotes so they splice
+// cleanly into the output. Everything else uses the value's default display.
+fn push_display(out: &mut String, v: &Value) {
+    match v {
+        Value::String(s) => out.push_str(s),
+        other => out.push_str(&other.to_string()),
+    }
 }
